@@ -195,22 +195,22 @@ func (u *EmailUsecase) initialSyncAccountEmails(ctx context.Context, account *en
 		// Debug logging for labels
 		fmt.Printf("Processing message %s with label IDs: %v, label names: %v\n", gmailMsg.ID, gmailMsg.Labels, labelNamesForMsg)
 		
-		// Determine category from Gmail label names (not IDs)
-		categoryID, err := u.getCategoryFromLabels(ctx, account.ID, labelNamesForMsg)
+		// Determine categories from Gmail label names (not IDs)
+		categoryIDs, err := u.getCategoriesFromLabels(ctx, account.ID, labelNamesForMsg)
 		if err != nil {
 			// Log error but continue processing
-			fmt.Printf("Warning: failed to get category for message %s: %v\n", gmailMsg.ID, err)
+			fmt.Printf("Warning: failed to get categories for message %s: %v\n", gmailMsg.ID, err)
 		}
 		
-		if categoryID != nil {
-			fmt.Printf("Message %s assigned to category ID: %d\n", gmailMsg.ID, *categoryID)
+		if len(categoryIDs) > 0 {
+			fmt.Printf("Message %s assigned to category IDs: %v\n", gmailMsg.ID, categoryIDs)
 		} else {
-			fmt.Printf("Message %s has no category assigned\n", gmailMsg.ID)
+			fmt.Printf("Message %s has no categories assigned\n", gmailMsg.ID)
 		}
 
 		email := entities.Email{
 			AccountID:      account.ID,
-			CategoryID:     categoryID,
+			CategoryIDs:    categoryIDs,
 			GmailMessageID: gmailMsg.ID,
 			Sender:         gmailMsg.Sender,
 			Subject:        gmailMsg.Subject,
@@ -292,18 +292,18 @@ func (u *EmailUsecase) incrementalSyncAccountEmails(ctx context.Context, account
 			}
 		}
 
-		// Determine category from Gmail label names (not IDs)
-		categoryID, err := u.getCategoryFromLabels(ctx, account.ID, labelNamesForMsg)
+		// Determine categories from Gmail label names (not IDs)
+		categoryIDs, err := u.getCategoriesFromLabels(ctx, account.ID, labelNamesForMsg)
 		if err != nil {
 			// Log error but continue processing
-			fmt.Printf("Warning: failed to get category for message %s: %v\n", gmailMsg.ID, err)
+			fmt.Printf("Warning: failed to get categories for message %s: %v\n", gmailMsg.ID, err)
 		}
 
 		if !exists {
 			// Create new email
 			email := entities.Email{
 				AccountID:      account.ID,
-				CategoryID:     categoryID,
+				CategoryIDs:    categoryIDs,
 				GmailMessageID: gmailMsg.ID,
 				Sender:         gmailMsg.Sender,
 				Subject:        gmailMsg.Subject,
@@ -312,11 +312,11 @@ func (u *EmailUsecase) incrementalSyncAccountEmails(ctx context.Context, account
 			}
 			emailsToCreate = append(emailsToCreate, email)
 		} else {
-			// Update existing email's category (label changed)
-			fmt.Printf("Updating category for existing email %s\n", gmailMsg.ID)
-			err := u.updateEmailCategory(ctx, account.ID, gmailMsg.ID, categoryID)
+			// Update existing email's categories (labels changed)
+			fmt.Printf("Updating categories for existing email %s\n", gmailMsg.ID)
+			err := u.updateEmailCategories(ctx, account.ID, gmailMsg.ID, categoryIDs)
 			if err != nil {
-				fmt.Printf("Warning: failed to update category for message %s: %v\n", gmailMsg.ID, err)
+				fmt.Printf("Warning: failed to update categories for message %s: %v\n", gmailMsg.ID, err)
 			}
 		}
 	}
@@ -358,68 +358,64 @@ func (u *EmailUsecase) GetEmailsByCategory(ctx context.Context, accountID, categ
 	return paginatedEmails, nil
 }
 
-// getCategoryFromLabels maps Gmail labels to app categories
-func (u *EmailUsecase) getCategoryFromLabels(ctx context.Context, accountID int64, labels []string) (*int64, error) {
-	fmt.Printf("getCategoryFromLabels called with labels: %v\n", labels)
+// getCategoriesFromLabels maps Gmail labels to app categories
+func (u *EmailUsecase) getCategoriesFromLabels(ctx context.Context, accountID int64, labels []string) ([]int64, error) {
+	fmt.Printf("getCategoriesFromLabels called with labels: %v\n", labels)
 	
 	// Skip if no labels
 	if len(labels) == 0 {
-		fmt.Printf("No labels found, returning nil\n")
-		return nil, nil
+		fmt.Printf("No labels found, returning empty slice\n")
+		return []int64{}, nil
 	}
 
-	// Priority order for selecting the primary category
-	var categoryName string
+	var categoryIDs []int64
+	categoryNames := make(map[string]bool)
 	
-	// First check for custom labels (non-system)
+	// First collect all custom labels (non-system)
 	for _, label := range labels {
 		if !u.isSystemLabel(label) {
-			categoryName = label
-			break
+			categoryNames[label] = true
 		}
 	}
 	
-	// If no custom labels, use the most meaningful system label
-	if categoryName == "" {
-		for _, label := range labels {
-			switch label {
-			case "SENT":
-				categoryName = "Sent"
-			case "DRAFT":
-				categoryName = "Drafts"
-			case "SPAM":
-				categoryName = "Spam"
-			case "TRASH":
-				categoryName = "Trash"
-			case "STARRED":
-				categoryName = "Starred"
-			case "IMPORTANT":
-				categoryName = "Important"
-			case "INBOX":
-				categoryName = "Inbox"
-			}
-			if categoryName != "" {
-				break
-			}
+	// Also include meaningful system labels as categories
+	for _, label := range labels {
+		var categoryName string
+		switch label {
+		case "SENT":
+			categoryName = "Sent"
+		case "DRAFT":
+			categoryName = "Drafts"
+		case "SPAM":
+			categoryName = "Spam"
+		case "TRASH":
+			categoryName = "Trash"
+		case "STARRED":
+			categoryName = "Starred"
+		case "IMPORTANT":
+			categoryName = "Important"
+		case "INBOX":
+			categoryName = "Inbox"
+		}
+		if categoryName != "" {
+			categoryNames[categoryName] = true
 		}
 	}
 
-	// If still no category found, return nil
-	if categoryName == "" {
-		fmt.Printf("No suitable category name found from labels\n")
-		return nil, nil
+	// Convert category names to IDs
+	for categoryName := range categoryNames {
+		// Get or create category
+		category, err := u.categoryRepo.GetOrCreate(ctx, accountID, categoryName)
+		if err != nil {
+			fmt.Printf("Warning: failed to get or create category '%s': %v\n", categoryName, err)
+			continue
+		}
+		categoryIDs = append(categoryIDs, category.ID)
+		fmt.Printf("Category '%s' found/created with ID: %d\n", categoryName, category.ID)
 	}
 
-	fmt.Printf("Selected category name: %s\n", categoryName)
-
-	// Get or create category
-	category, err := u.categoryRepo.GetOrCreate(ctx, accountID, categoryName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get or create category: %w", err)
-	}
-
-	fmt.Printf("Category created/found with ID: %d\n", category.ID)
-	return &category.ID, nil
+	fmt.Printf("Selected category IDs: %v\n", categoryIDs)
+	return categoryIDs, nil
 }
 
 // isSystemLabel checks if a label is a Gmail system label or auto-category
@@ -441,9 +437,9 @@ func (u *EmailUsecase) isSystemLabel(label string) bool {
 	return false
 }
 
-// updateEmailCategory updates the category of an existing email
-func (u *EmailUsecase) updateEmailCategory(ctx context.Context, accountID int64, gmailMessageID string, categoryID *int64) error {
-	return u.emailRepo.UpdateCategoryByGmailMessageID(ctx, accountID, gmailMessageID, categoryID)
+// updateEmailCategories updates the categories of an existing email
+func (u *EmailUsecase) updateEmailCategories(ctx context.Context, accountID int64, gmailMessageID string, categoryIDs []int64) error {
+	return u.emailRepo.UpdateCategoriesByGmailMessageID(ctx, accountID, gmailMessageID, categoryIDs)
 }
 
 // syncGmailLabels syncs Gmail labels with app categories

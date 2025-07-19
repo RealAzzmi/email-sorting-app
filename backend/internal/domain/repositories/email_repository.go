@@ -29,6 +29,9 @@ type EmailRepository interface {
 	DeleteByAccountID(ctx context.Context, accountID int64) error
 	ExistsByGmailMessageID(ctx context.Context, accountID int64, gmailMessageID string) (bool, error)
 	BulkCreate(ctx context.Context, emails []entities.Email) error
-	UpdateCategoryByGmailMessageID(ctx context.Context, accountID int64, gmailMessageID string, categoryID *int64) error
+	UpdateCategoriesByGmailMessageID(ctx context.Context, accountID int64, gmailMessageID string, categoryIDs []int64) error
 	GetByCategoryIDPaginated(ctx context.Context, accountID, categoryID int64, params PaginationParams) (*PaginatedEmails, error)
+	AddEmailToCategories(ctx context.Context, emailID int64, categoryIDs []int64) error
+	RemoveEmailFromCategories(ctx context.Context, emailID int64, categoryIDs []int64) error
+	GetEmailCategories(ctx context.Context, emailID int64) ([]int64, error)
 }

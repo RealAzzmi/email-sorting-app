@@ -14,7 +14,8 @@ interface Account {
 interface Email {
   id: number;
   account_id: number;
-  category_id?: number;
+  category_ids: number[];
+  categories?: Category[];
   gmail_message_id: string;
   sender: string;
   subject: string;
@@ -194,10 +195,12 @@ export default function DashboardPage() {
     fetchAccountCategories(account.id);
   };
 
-  const getCategoryName = (categoryId?: number): string => {
-    if (!categoryId) return '';
-    const category = categories.find(c => c.id === categoryId);
-    return category ? category.name : '';
+  const getCategoryNames = (categoryIds: number[]): string[] => {
+    if (!categoryIds || categoryIds.length === 0) return [];
+    return categoryIds.map(id => {
+      const category = categories.find(c => c.id === id);
+      return category ? category.name : '';
+    }).filter(name => name !== '');
   };
 
   const isSystemLabel = (categoryName: string): boolean => {
@@ -730,10 +733,14 @@ export default function DashboardPage() {
                       <div className="space-y-3">
                         <div className="flex items-start gap-3">
                           <h1 className="text-2xl font-bold text-black leading-tight">{selectedEmail.subject || '(No Subject)'}</h1>
-                          {selectedEmail.category_id && (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
-                              {getCategoryName(selectedEmail.category_id)}
-                            </span>
+                          {selectedEmail.category_ids && selectedEmail.category_ids.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {getCategoryNames(selectedEmail.category_ids).map((categoryName, index) => (
+                                <span key={index} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+                                  {categoryName}
+                                </span>
+                              ))}
+                            </div>
                           )}
                         </div>
                         <div className="space-y-1">
@@ -781,10 +788,19 @@ export default function DashboardPage() {
                               <h3 className="font-semibold text-black text-base truncate group-hover:text-gray-900">
                                 {email.subject || '(No Subject)'}
                               </h3>
-                              {email.category_id && (
-                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700 border-0">
-                                  {getCategoryName(email.category_id)}
-                                </span>
+                              {email.category_ids && email.category_ids.length > 0 && (
+                                <div className="flex flex-wrap gap-1">
+                                  {getCategoryNames(email.category_ids).slice(0, 2).map((categoryName, index) => (
+                                    <span key={index} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700 border-0">
+                                      {categoryName}
+                                    </span>
+                                  ))}
+                                  {email.category_ids.length > 2 && (
+                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-600 border-0">
+                                      +{email.category_ids.length - 2}
+                                    </span>
+                                  )}
+                                </div>
                               )}
                             </div>
                             <p className="text-sm text-gray-600 truncate font-medium">
