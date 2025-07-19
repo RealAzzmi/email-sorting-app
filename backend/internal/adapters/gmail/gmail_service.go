@@ -322,15 +322,42 @@ func (s *GmailService) extractBody(part *gmail.MessagePart) string {
 		}
 	}
 
+	var htmlContent, plainContent string
+
+	// Look for both HTML and plain text parts
 	for _, subPart := range part.Parts {
-		if subPart.MimeType == "text/plain" {
-			if subPart.Body != nil && subPart.Body.Data != "" {
-				data, err := base64.URLEncoding.DecodeString(subPart.Body.Data)
-				if err == nil {
-					return string(data)
+		if subPart.Body != nil && subPart.Body.Data != "" {
+			data, err := base64.URLEncoding.DecodeString(subPart.Body.Data)
+			if err == nil {
+				if subPart.MimeType == "text/html" {
+					htmlContent = string(data)
+				} else if subPart.MimeType == "text/plain" {
+					plainContent = string(data)
 				}
 			}
 		}
+		
+		// Recursively check nested parts
+		if len(subPart.Parts) > 0 {
+			nestedBody := s.extractBody(subPart)
+			if nestedBody != "" {
+				// If we find HTML in nested parts, prefer it
+				if subPart.MimeType == "multipart/alternative" || subPart.MimeType == "multipart/mixed" {
+					if htmlContent == "" && (nestedBody != plainContent) {
+						// Assume nested content is HTML if it's different from plain text
+						htmlContent = nestedBody
+					}
+				}
+			}
+		}
+	}
+
+	// Prefer HTML content over plain text
+	if htmlContent != "" {
+		return htmlContent
+	}
+	if plainContent != "" {
+		return plainContent
 	}
 
 	return ""
