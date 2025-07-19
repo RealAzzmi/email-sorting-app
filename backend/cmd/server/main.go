@@ -42,7 +42,7 @@ func main() {
 	// Initialize use cases
 	authUsecase := usecases.NewAuthUsecase(accountRepo, oauthConfig)
 	accountUsecase := usecases.NewAccountUsecase(accountRepo)
-	categoryUsecase := usecases.NewCategoryUsecase(categoryRepo)
+	categoryUsecase := usecases.NewCategoryUsecase(categoryRepo, accountRepo, gmailService)
 	emailUsecase := usecases.NewEmailUsecase(emailRepo, accountRepo, categoryRepo, gmailService)
 
 	// Initialize HTTP handlers

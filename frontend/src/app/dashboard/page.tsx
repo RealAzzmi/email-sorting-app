@@ -36,12 +36,81 @@ interface PaginatedEmails {
   total_pages: number;
 }
 
+interface CreateCategoryFormProps {
+  onSubmit: (name: string, description: string) => void;
+  onCancel: () => void;
+}
+
+function CreateCategoryForm({ onSubmit, onCancel }: CreateCategoryFormProps) {
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (name.trim()) {
+      onSubmit(name.trim(), description.trim());
+      setName('');
+      setDescription('');
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-3">
+      <div>
+        <label htmlFor="categoryName" className="block text-sm font-medium text-gray-700 mb-1">
+          Category Name
+        </label>
+        <input
+          type="text"
+          id="categoryName"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-black focus:border-black"
+          placeholder="Enter category name"
+          required
+        />
+      </div>
+      <div>
+        <label htmlFor="categoryDescription" className="block text-sm font-medium text-gray-700 mb-1">
+          Description (optional)
+        </label>
+        <textarea
+          id="categoryDescription"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-black focus:border-black"
+          placeholder="Enter description"
+          rows={2}
+        />
+      </div>
+      <div className="flex justify-end space-x-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="px-3 py-2 text-sm border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          className="px-3 py-2 text-sm bg-black text-white rounded-md hover:bg-gray-800 transition-colors"
+        >
+          Create
+        </button>
+      </div>
+    </form>
+  );
+}
+
 export default function DashboardPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
   const [emails, setEmails] = useState<Email[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
+  const [showCreateCategoryForm, setShowCreateCategoryForm] = useState(false);
+  const [showCustomDropdown, setShowCustomDropdown] = useState(false);
   const [loading, setLoading] = useState(true);
   const [emailsLoading, setEmailsLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -106,6 +175,7 @@ export default function DashboardPage() {
   const handleAccountSelect = (account: Account) => {
     setSelectedAccount(account);
     setSelectedEmail(null);
+    setSelectedCategory(null);
     setCurrentPage(1);
     fetchAccountEmails(account.id, 1);
     fetchAccountCategories(account.id);
@@ -115,6 +185,112 @@ export default function DashboardPage() {
     if (!categoryId) return '';
     const category = categories.find(c => c.id === categoryId);
     return category ? category.name : '';
+  };
+
+  const isSystemLabel = (categoryName: string): boolean => {
+    const systemLabels = [
+      'Inbox', 'Sent', 'Drafts', 'Spam', 'Trash', 'Important', 'Starred', 'All Mail', 'Chats',
+      'INBOX', 'SENT', 'DRAFT', 'SPAM', 'TRASH', 'IMPORTANT', 'STARRED', 'UNREAD', 'CHAT'
+    ];
+    return systemLabels.includes(categoryName);
+  };
+
+  const getSystemCategories = (): Category[] => {
+    return categories.filter(cat => isSystemLabel(cat.name));
+  };
+
+  const getCustomCategories = (): Category[] => {
+    return categories.filter(cat => !isSystemLabel(cat.name));
+  };
+
+  const handleCategorySelect = async (category: Category) => {
+    if (!selectedAccount) return;
+    
+    setSelectedCategory(category);
+    setSelectedEmail(null);
+    setCurrentPage(1);
+    
+    // Fetch emails for this category
+    setEmailsLoading(true);
+    try {
+      const response = await fetch(`http://localhost:8080/accounts/${selectedAccount.id}/categories/${category.id}/emails?page=1&page_size=${pageSize}`, {
+        credentials: 'include',
+      });
+      const data: PaginatedEmails = await response.json();
+      setEmails(data.emails || []);
+      setCurrentPage(data.page);
+      setTotalPages(data.total_pages);
+      setTotalCount(data.total_count);
+    } catch (error) {
+      console.error('Failed to fetch emails by category:', error);
+      setEmails([]);
+      setCurrentPage(1);
+      setTotalPages(1);
+      setTotalCount(0);
+    } finally {
+      setEmailsLoading(false);
+    }
+  };
+
+  const handleCreateCategory = async (name: string, description: string) => {
+    if (!selectedAccount) return;
+    
+    try {
+      const response = await fetch(`http://localhost:8080/accounts/${selectedAccount.id}/categories`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ name, description }),
+      });
+      
+      if (response.ok) {
+        // Refresh categories list
+        await fetchAccountCategories(selectedAccount.id);
+        setShowCreateCategoryForm(false);
+      } else {
+        console.error('Failed to create category');
+      }
+    } catch (error) {
+      console.error('Failed to create category:', error);
+    }
+  };
+
+  const handleDeleteCategory = async (categoryId: number, event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (!selectedAccount) return;
+    
+    if (confirm('Are you sure you want to delete this category?')) {
+      try {
+        const response = await fetch(`http://localhost:8080/accounts/${selectedAccount.id}/categories/${categoryId}`, {
+          method: 'DELETE',
+          credentials: 'include',
+        });
+        
+        if (response.ok) {
+          // Refresh categories list
+          await fetchAccountCategories(selectedAccount.id);
+          // If this was the selected category, clear selection
+          if (selectedCategory?.id === categoryId) {
+            setSelectedCategory(null);
+            fetchAccountEmails(selectedAccount.id, 1);
+          }
+        } else {
+          console.error('Failed to delete category');
+        }
+      } catch (error) {
+        console.error('Failed to delete category:', error);
+      }
+    }
+  };
+
+  const handleBackToAllEmails = () => {
+    if (!selectedAccount) return;
+    
+    setSelectedCategory(null);
+    setCurrentPage(1);
+    fetchAccountEmails(selectedAccount.id, 1);
   };
 
   const handleRefreshEmails = async () => {
@@ -128,9 +304,12 @@ export default function DashboardPage() {
       });
       
       if (response.ok) {
-        // After refresh, fetch the first page
+        // After refresh, fetch the first page and categories
         setCurrentPage(1);
-        await fetchAccountEmails(selectedAccount.id, 1);
+        await Promise.all([
+          fetchAccountEmails(selectedAccount.id, 1),
+          fetchAccountCategories(selectedAccount.id)
+        ]);
       } else {
         console.error('Failed to refresh emails');
       }
@@ -141,9 +320,30 @@ export default function DashboardPage() {
     }
   };
 
-  const handlePageChange = (page: number) => {
-    if (selectedAccount && page >= 1 && page <= totalPages) {
-      setCurrentPage(page);
+  const handlePageChange = async (page: number) => {
+    if (!selectedAccount || page < 1 || page > totalPages) return;
+    
+    setCurrentPage(page);
+    
+    if (selectedCategory) {
+      // Fetch emails for the selected category
+      setEmailsLoading(true);
+      try {
+        const response = await fetch(`http://localhost:8080/accounts/${selectedAccount.id}/categories/${selectedCategory.id}/emails?page=${page}&page_size=${pageSize}`, {
+          credentials: 'include',
+        });
+        const data: PaginatedEmails = await response.json();
+        setEmails(data.emails || []);
+        setCurrentPage(data.page);
+        setTotalPages(data.total_pages);
+        setTotalCount(data.total_count);
+      } catch (error) {
+        console.error('Failed to fetch emails by category:', error);
+      } finally {
+        setEmailsLoading(false);
+      }
+    } else {
+      // Fetch all emails
       fetchAccountEmails(selectedAccount.id, page);
     }
   };
@@ -268,18 +468,118 @@ export default function DashboardPage() {
               )}
             </div>
 
-            {/* Categories Section (Placeholder) */}
+            {/* Categories Section */}
             <div className="bg-white border border-gray-200 rounded-lg p-6">
-              <h2 className="text-lg font-medium text-black mb-4">Email Categories</h2>
-              <div className="text-center py-8">
-                <p className="text-gray-500 mb-4">Categories coming soon</p>
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-lg font-medium text-black">Email Categories</h2>
                 <button
-                  disabled
-                  className="px-4 py-2 bg-gray-200 text-gray-400 rounded-md cursor-not-allowed"
+                  onClick={() => setShowCreateCategoryForm(true)}
+                  className="px-3 py-1 text-sm bg-black text-white rounded-md hover:bg-gray-800 transition-colors"
                 >
-                  Add Category
+                  + Add
                 </button>
               </div>
+              
+              {showCreateCategoryForm && (
+                <div className="mb-4 p-4 border border-gray-200 rounded-lg bg-gray-50">
+                  <CreateCategoryForm 
+                    onSubmit={handleCreateCategory}
+                    onCancel={() => setShowCreateCategoryForm(false)}
+                  />
+                </div>
+              )}
+              
+              {categories.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-gray-500">No categories yet</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <button
+                    onClick={handleBackToAllEmails}
+                    className={`w-full text-left p-3 rounded-lg transition-colors ${
+                      !selectedCategory 
+                        ? 'bg-black text-white' 
+                        : 'hover:bg-gray-50 text-gray-700'
+                    }`}
+                  >
+                    All Emails ({totalCount})
+                  </button>
+                  
+                  {/* System Categories */}
+                  {getSystemCategories().map((category) => (
+                    <div
+                      key={category.id}
+                      onClick={() => handleCategorySelect(category)}
+                      className={`flex justify-between items-center p-3 rounded-lg cursor-pointer transition-colors ${
+                        selectedCategory?.id === category.id
+                          ? 'bg-black text-white'
+                          : 'hover:bg-gray-50 text-gray-700'
+                      }`}
+                    >
+                      <div className="flex-1">
+                        <p className="font-medium">{category.name}</p>
+                      </div>
+                    </div>
+                  ))}
+                  
+                  {/* Custom Categories Dropdown */}
+                  {getCustomCategories().length > 0 && (
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowCustomDropdown(!showCustomDropdown)}
+                        className="w-full text-left p-3 rounded-lg hover:bg-gray-50 text-gray-700 transition-colors flex justify-between items-center"
+                      >
+                        <span className="font-medium">Custom Labels ({getCustomCategories().length})</span>
+                        <svg 
+                          className={`w-4 h-4 transition-transform ${showCustomDropdown ? 'rotate-180' : ''}`} 
+                          fill="currentColor" 
+                          viewBox="0 0 20 20"
+                        >
+                          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd"/>
+                        </svg>
+                      </button>
+                      
+                      {showCustomDropdown && (
+                        <div className="mt-2 ml-4 space-y-1 border-l-2 border-gray-200 pl-3">
+                          {getCustomCategories().map((category) => (
+                            <div
+                              key={category.id}
+                              onClick={() => {
+                                handleCategorySelect(category);
+                                setShowCustomDropdown(false);
+                              }}
+                              className={`flex justify-between items-center p-2 rounded-lg cursor-pointer transition-colors ${
+                                selectedCategory?.id === category.id
+                                  ? 'bg-black text-white'
+                                  : 'hover:bg-gray-50 text-gray-700'
+                              }`}
+                            >
+                              <div className="flex-1">
+                                <p className="font-medium text-sm">{category.name}</p>
+                                {category.description && (
+                                  <p className="text-xs opacity-75">{category.description}</p>
+                                )}
+                              </div>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteCategory(category.id, e);
+                                }}
+                                className="opacity-50 hover:opacity-100 transition-opacity ml-2"
+                              >
+                                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"/>
+                                </svg>
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -291,11 +591,14 @@ export default function DashboardPage() {
                   <div className="flex justify-between items-center">
                     <div>
                       <h2 className="text-lg font-medium text-black">
-                        Emails for {selectedAccount.email}
+                        {selectedCategory 
+                          ? `${selectedCategory.name} - ${selectedAccount.email}`
+                          : `Emails for ${selectedAccount.email}`
+                        }
                       </h2>
                       {totalCount > 0 && (
                         <p className="text-sm text-gray-600">
-                          {totalCount} emails total
+                          {totalCount} {selectedCategory ? `emails in ${selectedCategory.name}` : 'emails total'}
                         </p>
                       )}
                     </div>

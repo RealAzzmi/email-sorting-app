@@ -224,3 +224,57 @@ func (r *EmailRepository) UpdateCategoryByGmailMessageID(ctx context.Context, ac
 
 	return nil
 }
+
+func (r *EmailRepository) GetByCategoryIDPaginated(ctx context.Context, accountID, categoryID int64, params repositories.PaginationParams) (*repositories.PaginatedEmails, error) {
+	// Get total count
+	var totalCount int64
+	err := r.db.QueryRow(ctx, `
+		SELECT COUNT(*) FROM emails WHERE account_id = $1 AND category_id = $2
+	`, accountID, categoryID).Scan(&totalCount)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get total count: %w", err)
+	}
+
+	// Calculate offset
+	offset := (params.Page - 1) * params.PageSize
+	
+	// Get paginated emails
+	rows, err := r.db.Query(ctx, `
+		SELECT id, account_id, category_id, gmail_message_id, sender, subject, body, 
+		       ai_summary, received_at, is_archived_in_gmail, unsubscribe_link, created_at, updated_at
+		FROM emails 
+		WHERE account_id = $1 AND category_id = $2
+		ORDER BY received_at DESC
+		LIMIT $3 OFFSET $4
+	`, accountID, categoryID, params.PageSize, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query paginated emails by category: %w", err)
+	}
+	defer rows.Close()
+
+	var emails []entities.Email
+	for rows.Next() {
+		var email entities.Email
+		err := rows.Scan(
+			&email.ID, &email.AccountID, &email.CategoryID, &email.GmailMessageID,
+			&email.Sender, &email.Subject, &email.Body, &email.AISummary,
+			&email.ReceivedAt, &email.IsArchivedInGmail, &email.UnsubscribeLink,
+			&email.CreatedAt, &email.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan email: %w", err)
+		}
+		emails = append(emails, email)
+	}
+
+	// Calculate total pages
+	totalPages := int(math.Ceil(float64(totalCount) / float64(params.PageSize)))
+
+	return &repositories.PaginatedEmails{
+		Emails:     emails,
+		TotalCount: totalCount,
+		Page:       params.Page,
+		PageSize:   params.PageSize,
+		TotalPages: totalPages,
+	}, nil
+}

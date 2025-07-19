@@ -82,6 +82,13 @@ func (u *EmailUsecase) RefreshAccountEmails(ctx context.Context, accountID int64
 		return fmt.Errorf("account not found: %w", err)
 	}
 
+	// Sync Gmail labels to create new categories for any new labels
+	err = u.syncGmailLabels(ctx, accountID)
+	if err != nil {
+		// Log error but don't fail the entire refresh
+		fmt.Printf("Warning: failed to sync Gmail labels: %v\n", err)
+	}
+
 	// Check if this is the first sync (no history ID)
 	if account.LastSyncHistoryID == nil {
 		// First time sync - do full sync and get initial history ID
@@ -335,6 +342,22 @@ func (u *EmailUsecase) GetEmailByID(ctx context.Context, id int64) (*entities.Em
 	return u.emailRepo.GetByID(ctx, id)
 }
 
+func (u *EmailUsecase) GetEmailsByCategory(ctx context.Context, accountID, categoryID int64, params repositories.PaginationParams) (*repositories.PaginatedEmails, error) {
+	// First, check if account exists
+	_, err := u.accountRepo.GetByID(ctx, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("account not found: %w", err)
+	}
+
+	// Get paginated emails by category
+	paginatedEmails, err := u.emailRepo.GetByCategoryIDPaginated(ctx, accountID, categoryID, params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get emails by category: %w", err)
+	}
+
+	return paginatedEmails, nil
+}
+
 // getCategoryFromLabels maps Gmail labels to app categories
 func (u *EmailUsecase) getCategoryFromLabels(ctx context.Context, accountID int64, labels []string) (*int64, error) {
 	fmt.Printf("getCategoryFromLabels called with labels: %v\n", labels)
@@ -421,4 +444,73 @@ func (u *EmailUsecase) isSystemLabel(label string) bool {
 // updateEmailCategory updates the category of an existing email
 func (u *EmailUsecase) updateEmailCategory(ctx context.Context, accountID int64, gmailMessageID string, categoryID *int64) error {
 	return u.emailRepo.UpdateCategoryByGmailMessageID(ctx, accountID, gmailMessageID, categoryID)
+}
+
+// syncGmailLabels syncs Gmail labels with app categories
+func (u *EmailUsecase) syncGmailLabels(ctx context.Context, accountID int64) error {
+	// Get account to access OAuth token
+	account, err := u.accountRepo.GetByID(ctx, accountID)
+	if err != nil {
+		return fmt.Errorf("failed to get account: %w", err)
+	}
+
+	// Convert to OAuth2 token
+	token := account.ToOAuth2Token()
+
+	// Get all Gmail labels
+	gmailLabels, err := u.gmailService.GetAllLabels(ctx, token)
+	if err != nil {
+		return fmt.Errorf("failed to get Gmail labels: %w", err)
+	}
+
+	// Get existing categories for this account
+	existingCategories, err := u.categoryRepo.GetByAccountID(ctx, accountID)
+	if err != nil {
+		return fmt.Errorf("failed to get existing categories: %w", err)
+	}
+
+	// Create a map of existing category names for quick lookup
+	existingCategoryNames := make(map[string]bool)
+	for _, cat := range existingCategories {
+		existingCategoryNames[cat.Name] = true
+	}
+
+	// System labels that shouldn't be created as categories
+	systemLabels := map[string]bool{
+		// Gmail system label IDs
+		"INBOX": true, "SENT": true, "DRAFT": true, "SPAM": true, "TRASH": true,
+		"IMPORTANT": true, "STARRED": true, "UNREAD": true, "CHAT": true,
+		// Star labels
+		"YELLOW_STAR": true, "BLUE_STAR": true, "RED_STAR": true, "ORANGE_STAR": true,
+		"GREEN_STAR": true, "PURPLE_STAR": true,
+		// Category labels
+		"CATEGORY_PERSONAL": true, "CATEGORY_SOCIAL": true, "CATEGORY_PROMOTIONS": true,
+		"CATEGORY_UPDATES": true, "CATEGORY_FORUMS": true,
+	}
+
+	// Create new categories for labels that don't exist yet
+	for _, label := range gmailLabels {
+		// Skip system labels and labels that are already categories
+		if systemLabels[label.Name] || label.Type == "system" || existingCategoryNames[label.Name] {
+			continue
+		}
+
+		// Create new category for this Gmail label
+		category := &entities.Category{
+			AccountID:   accountID,
+			Name:        label.Name,
+			Description: nil, // Gmail labels don't have descriptions
+		}
+
+		_, err := u.categoryRepo.Create(ctx, category)
+		if err != nil {
+			// Log error but continue with other labels
+			fmt.Printf("Warning: failed to create category for label '%s': %v\n", label.Name, err)
+			continue
+		}
+
+		fmt.Printf("Created new category '%s' from Gmail label\n", label.Name)
+	}
+
+	return nil
 }

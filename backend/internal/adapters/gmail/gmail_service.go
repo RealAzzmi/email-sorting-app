@@ -335,3 +335,100 @@ func (s *GmailService) extractBody(part *gmail.MessagePart) string {
 
 	return ""
 }
+
+func (s *GmailService) DeleteLabel(ctx context.Context, token *oauth2.Token, labelName string) error {
+	client := s.oauthConfig.Client(ctx, token)
+	srv, err := gmail.NewService(ctx, option.WithHTTPClient(client))
+	if err != nil {
+		return fmt.Errorf("failed to create Gmail service: %w", err)
+	}
+
+	// First, get all labels to find the one with the matching name
+	labelsResponse, err := srv.Users.Labels.List("me").Do()
+	if err != nil {
+		return fmt.Errorf("failed to list labels: %w", err)
+	}
+
+	var labelID string
+	for _, label := range labelsResponse.Labels {
+		if label.Name == labelName {
+			// Don't allow deletion of system labels
+			if label.Type == "system" {
+				return fmt.Errorf("cannot delete system label: %s", labelName)
+			}
+			labelID = label.Id
+			break
+		}
+	}
+
+	if labelID == "" {
+		return fmt.Errorf("label not found: %s", labelName)
+	}
+
+	// Delete the label
+	err = srv.Users.Labels.Delete("me", labelID).Do()
+	if err != nil {
+		return fmt.Errorf("failed to delete label: %w", err)
+	}
+
+	return nil
+}
+
+func (s *GmailService) CreateLabel(ctx context.Context, token *oauth2.Token, labelName string) error {
+	client := s.oauthConfig.Client(ctx, token)
+	srv, err := gmail.NewService(ctx, option.WithHTTPClient(client))
+	if err != nil {
+		return fmt.Errorf("failed to create Gmail service: %w", err)
+	}
+
+	// Check if label already exists
+	labelsResponse, err := srv.Users.Labels.List("me").Do()
+	if err != nil {
+		return fmt.Errorf("failed to list labels: %w", err)
+	}
+
+	for _, label := range labelsResponse.Labels {
+		if label.Name == labelName {
+			// Label already exists, no need to create
+			return nil
+		}
+	}
+
+	// Create the new label
+	newLabel := &gmail.Label{
+		Name:                labelName,
+		MessageListVisibility: "show",
+		LabelListVisibility:   "labelShow",
+	}
+
+	_, err = srv.Users.Labels.Create("me", newLabel).Do()
+	if err != nil {
+		return fmt.Errorf("failed to create label: %w", err)
+	}
+
+	return nil
+}
+
+func (s *GmailService) GetAllLabels(ctx context.Context, token *oauth2.Token) ([]entities.GmailLabel, error) {
+	client := s.oauthConfig.Client(ctx, token)
+	srv, err := gmail.NewService(ctx, option.WithHTTPClient(client))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Gmail service: %w", err)
+	}
+
+	labelsResponse, err := srv.Users.Labels.List("me").Do()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list labels: %w", err)
+	}
+
+	var gmailLabels []entities.GmailLabel
+	for _, label := range labelsResponse.Labels {
+		gmailLabels = append(gmailLabels, entities.GmailLabel{
+			ID:   label.Id,
+			Name: label.Name,
+			Type: label.Type,
+		})
+	}
+
+	return gmailLabels, nil
+}

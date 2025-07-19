@@ -94,3 +94,12 @@ func (r *CategoryRepository) GetOrCreate(ctx context.Context, accountID int64, n
 
 	return r.Create(ctx, newCategory)
 }
+
+func (r *CategoryRepository) Delete(ctx context.Context, categoryID int64) error {
+	_, err := r.db.Exec(ctx, "DELETE FROM categories WHERE id = $1", categoryID)
+	if err != nil {
+		return fmt.Errorf("failed to delete category: %w", err)
+	}
+
+	return nil
+}

@@ -30,4 +30,5 @@ type EmailRepository interface {
 	ExistsByGmailMessageID(ctx context.Context, accountID int64, gmailMessageID string) (bool, error)
 	BulkCreate(ctx context.Context, emails []entities.Email) error
 	UpdateCategoryByGmailMessageID(ctx context.Context, accountID int64, gmailMessageID string, categoryID *int64) error
+	GetByCategoryIDPaginated(ctx context.Context, accountID, categoryID int64, params PaginationParams) (*PaginatedEmails, error)
 }

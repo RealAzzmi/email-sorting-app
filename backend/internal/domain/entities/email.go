@@ -26,3 +26,9 @@ type GmailMessage struct {
 	Labels     []string
 	ReceivedAt time.Time
 }
+
+type GmailLabel struct {
+	ID   string
+	Name string
+	Type string
+}

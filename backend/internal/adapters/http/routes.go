@@ -28,10 +28,13 @@ func SetupRoutes(
 
 	// Category routes
 	router.GET("/accounts/:id/categories", categoryHandler.GetAccountCategories)
+	router.POST("/accounts/:id/categories", categoryHandler.CreateCategory)
+	router.DELETE("/accounts/:id/categories/:categoryId", categoryHandler.DeleteCategory)
 
 	// Email routes
 	router.GET("/accounts/:id/emails", emailHandler.GetAccountEmails)
 	router.POST("/accounts/:id/emails/refresh", emailHandler.RefreshAccountEmails)
+	router.GET("/accounts/:id/categories/:categoryId/emails", emailHandler.GetEmailsByCategory)
 
 	return router
 }

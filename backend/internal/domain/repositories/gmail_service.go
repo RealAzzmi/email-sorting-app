@@ -15,4 +15,7 @@ type GmailService interface {
 	GetCurrentHistoryId(ctx context.Context, token *oauth2.Token) (string, error)
 	ListHistory(ctx context.Context, token *oauth2.Token, startHistoryId string) ([]entities.GmailMessage, string, error)
 	GetLabelNames(ctx context.Context, token *oauth2.Token, labelIds []string) (map[string]string, error)
+	DeleteLabel(ctx context.Context, token *oauth2.Token, labelName string) error
+	CreateLabel(ctx context.Context, token *oauth2.Token, labelName string) error
+	GetAllLabels(ctx context.Context, token *oauth2.Token) ([]entities.GmailLabel, error)
 }
