@@ -31,6 +31,7 @@ func main() {
 	// Initialize repositories
 	accountRepo := postgres.NewAccountRepository(db)
 	emailRepo := postgres.NewEmailRepository(db)
+	categoryRepo := postgres.NewCategoryRepository(db)
 
 	// Initialize OAuth config
 	oauthConfig := cfg.OAuthConfig()
@@ -41,15 +42,17 @@ func main() {
 	// Initialize use cases
 	authUsecase := usecases.NewAuthUsecase(accountRepo, oauthConfig)
 	accountUsecase := usecases.NewAccountUsecase(accountRepo)
-	emailUsecase := usecases.NewEmailUsecase(emailRepo, accountRepo, gmailService)
+	categoryUsecase := usecases.NewCategoryUsecase(categoryRepo)
+	emailUsecase := usecases.NewEmailUsecase(emailRepo, accountRepo, categoryRepo, gmailService)
 
 	// Initialize HTTP handlers
 	authHandler := handlers.NewAuthHandler(authUsecase)
 	accountHandler := handlers.NewAccountHandler(accountUsecase)
+	categoryHandler := handlers.NewCategoryHandler(categoryUsecase)
 	emailHandler := handlers.NewEmailHandler(emailUsecase)
 
 	// Setup routes
-	r := http.SetupRoutes(authHandler, accountHandler, emailHandler)
+	r := http.SetupRoutes(authHandler, accountHandler, categoryHandler, emailHandler)
 
 	// Start server
 	fmt.Printf("Server starting on port %s\n", cfg.Port)

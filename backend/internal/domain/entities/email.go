@@ -23,5 +23,6 @@ type GmailMessage struct {
 	Sender     string
 	Subject    string
 	Body       string
+	Labels     []string
 	ReceivedAt time.Time
 }

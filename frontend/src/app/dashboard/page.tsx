@@ -13,11 +13,19 @@ interface Account {
 interface Email {
   id: number;
   account_id: number;
+  category_id?: number;
   gmail_message_id: string;
   sender: string;
   subject: string;
   body: string;
   received_at: string;
+}
+
+interface Category {
+  id: number;
+  account_id: number;
+  name: string;
+  description?: string;
 }
 
 interface PaginatedEmails {
@@ -32,6 +40,7 @@ export default function DashboardPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
   const [emails, setEmails] = useState<Email[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
   const [loading, setLoading] = useState(true);
   const [emailsLoading, setEmailsLoading] = useState(false);
@@ -81,11 +90,31 @@ export default function DashboardPage() {
     }
   };
 
+  const fetchAccountCategories = async (accountId: number) => {
+    try {
+      const response = await fetch(`http://localhost:8080/accounts/${accountId}/categories`, {
+        credentials: 'include',
+      });
+      const data = await response.json();
+      setCategories(data.categories || []);
+    } catch (error) {
+      console.error('Failed to fetch categories:', error);
+      setCategories([]);
+    }
+  };
+
   const handleAccountSelect = (account: Account) => {
     setSelectedAccount(account);
     setSelectedEmail(null);
     setCurrentPage(1);
     fetchAccountEmails(account.id, 1);
+    fetchAccountCategories(account.id);
+  };
+
+  const getCategoryName = (categoryId?: number): string => {
+    if (!categoryId) return '';
+    const category = categories.find(c => c.id === categoryId);
+    return category ? category.name : '';
   };
 
   const handleRefreshEmails = async () => {
@@ -306,7 +335,14 @@ export default function DashboardPage() {
                     </button>
                     <div className="space-y-4">
                       <div>
-                        <h3 className="text-xl font-medium text-black">{selectedEmail.subject}</h3>
+                        <div className="flex items-center gap-2 mb-2">
+                          <h3 className="text-xl font-medium text-black">{selectedEmail.subject}</h3>
+                          {selectedEmail.category_id && (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                              {getCategoryName(selectedEmail.category_id)}
+                            </span>
+                          )}
+                        </div>
                         <p className="text-sm text-gray-600">From: {selectedEmail.sender}</p>
                         <p className="text-sm text-gray-600">
                           Received: {new Date(selectedEmail.received_at).toLocaleString()}
@@ -329,9 +365,16 @@ export default function DashboardPage() {
                       >
                         <div className="flex justify-between items-start">
                           <div className="flex-1 min-w-0">
-                            <p className="font-medium text-black truncate">
-                              {email.subject || '(No Subject)'}
-                            </p>
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className="font-medium text-black truncate">
+                                {email.subject || '(No Subject)'}
+                              </p>
+                              {email.category_id && (
+                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                  {getCategoryName(email.category_id)}
+                                </span>
+                              )}
+                            </div>
                             <p className="text-sm text-gray-600 truncate">
                               {email.sender}
                             </p>

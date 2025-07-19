@@ -29,4 +29,5 @@ type EmailRepository interface {
 	DeleteByAccountID(ctx context.Context, accountID int64) error
 	ExistsByGmailMessageID(ctx context.Context, accountID int64, gmailMessageID string) (bool, error)
 	BulkCreate(ctx context.Context, emails []entities.Email) error
+	UpdateCategoryByGmailMessageID(ctx context.Context, accountID int64, gmailMessageID string, categoryID *int64) error
 }

@@ -45,11 +45,11 @@ func (r *AccountRepository) GetAll(ctx context.Context) ([]entities.Account, err
 func (r *AccountRepository) GetByID(ctx context.Context, id int64) (*entities.Account, error) {
 	var account entities.Account
 	err := r.db.QueryRow(ctx, `
-		SELECT id, email, name, access_token, refresh_token, token_expiry, created_at, updated_at 
+		SELECT id, email, name, access_token, refresh_token, token_expiry, last_sync_history_id, created_at, updated_at 
 		FROM accounts WHERE id = $1
 	`, id).Scan(
 		&account.ID, &account.Email, &account.Name, &account.AccessToken, 
-		&account.RefreshToken, &account.TokenExpiry, &account.CreatedAt, &account.UpdatedAt,
+		&account.RefreshToken, &account.TokenExpiry, &account.LastSyncHistoryID, &account.CreatedAt, &account.UpdatedAt,
 	)
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -64,11 +64,11 @@ func (r *AccountRepository) GetByID(ctx context.Context, id int64) (*entities.Ac
 func (r *AccountRepository) GetByEmail(ctx context.Context, email string) (*entities.Account, error) {
 	var account entities.Account
 	err := r.db.QueryRow(ctx, `
-		SELECT id, email, name, access_token, refresh_token, token_expiry, created_at, updated_at 
+		SELECT id, email, name, access_token, refresh_token, token_expiry, last_sync_history_id, created_at, updated_at 
 		FROM accounts WHERE email = $1
 	`, email).Scan(
 		&account.ID, &account.Email, &account.Name, &account.AccessToken, 
-		&account.RefreshToken, &account.TokenExpiry, &account.CreatedAt, &account.UpdatedAt,
+		&account.RefreshToken, &account.TokenExpiry, &account.LastSyncHistoryID, &account.CreatedAt, &account.UpdatedAt,
 	)
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -99,9 +99,9 @@ func (r *AccountRepository) Create(ctx context.Context, email, name string, toke
 func (r *AccountRepository) Update(ctx context.Context, account *entities.Account) error {
 	_, err := r.db.Exec(ctx, `
 		UPDATE accounts 
-		SET access_token = $1, refresh_token = $2, token_expiry = $3, updated_at = NOW()
-		WHERE id = $4
-	`, account.AccessToken, account.RefreshToken, account.TokenExpiry, account.ID)
+		SET access_token = $1, refresh_token = $2, token_expiry = $3, last_sync_history_id = $4, updated_at = NOW()
+		WHERE id = $5
+	`, account.AccessToken, account.RefreshToken, account.TokenExpiry, account.LastSyncHistoryID, account.ID)
 	if err != nil {
 		return fmt.Errorf("failed to update account: %w", err)
 	}
@@ -113,6 +113,19 @@ func (r *AccountRepository) Delete(ctx context.Context, id int64) error {
 	_, err := r.db.Exec(ctx, "DELETE FROM accounts WHERE id = $1", id)
 	if err != nil {
 		return fmt.Errorf("failed to delete account: %w", err)
+	}
+
+	return nil
+}
+
+func (r *AccountRepository) UpdateLastSyncHistoryID(ctx context.Context, accountID int64, historyID string) error {
+	_, err := r.db.Exec(ctx, `
+		UPDATE accounts 
+		SET last_sync_history_id = $1, updated_at = NOW()
+		WHERE id = $2
+	`, historyID, accountID)
+	if err != nil {
+		return fmt.Errorf("failed to update last sync history ID: %w", err)
 	}
 
 	return nil

@@ -74,10 +74,10 @@ func (r *EmailRepository) GetByID(ctx context.Context, id int64) (*entities.Emai
 
 func (r *EmailRepository) Create(ctx context.Context, email *entities.Email) (*entities.Email, error) {
 	err := r.db.QueryRow(ctx, `
-		INSERT INTO emails (account_id, gmail_message_id, sender, subject, body, received_at, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+		INSERT INTO emails (account_id, category_id, gmail_message_id, sender, subject, body, received_at, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
 		RETURNING id, created_at, updated_at
-	`, email.AccountID, email.GmailMessageID, email.Sender, email.Subject, email.Body, email.ReceivedAt).Scan(
+	`, email.AccountID, email.CategoryID, email.GmailMessageID, email.Sender, email.Subject, email.Body, email.ReceivedAt).Scan(
 		&email.ID, &email.CreatedAt, &email.UpdatedAt,
 	)
 	if err != nil {
@@ -131,9 +131,9 @@ func (r *EmailRepository) BulkCreate(ctx context.Context, emails []entities.Emai
 	batch := &pgx.Batch{}
 	for _, email := range emails {
 		batch.Queue(`
-			INSERT INTO emails (account_id, gmail_message_id, sender, subject, body, received_at, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
-		`, email.AccountID, email.GmailMessageID, email.Sender, email.Subject, email.Body, email.ReceivedAt)
+			INSERT INTO emails (account_id, category_id, gmail_message_id, sender, subject, body, received_at, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+		`, email.AccountID, email.CategoryID, email.GmailMessageID, email.Sender, email.Subject, email.Body, email.ReceivedAt)
 	}
 
 	results := r.db.SendBatch(ctx, batch)
@@ -207,6 +207,19 @@ func (r *EmailRepository) DeleteByAccountID(ctx context.Context, accountID int64
 	_, err := r.db.Exec(ctx, "DELETE FROM emails WHERE account_id = $1", accountID)
 	if err != nil {
 		return fmt.Errorf("failed to delete emails by account ID: %w", err)
+	}
+
+	return nil
+}
+
+func (r *EmailRepository) UpdateCategoryByGmailMessageID(ctx context.Context, accountID int64, gmailMessageID string, categoryID *int64) error {
+	_, err := r.db.Exec(ctx, `
+		UPDATE emails 
+		SET category_id = $1, updated_at = NOW()
+		WHERE account_id = $2 AND gmail_message_id = $3
+	`, categoryID, accountID, gmailMessageID)
+	if err != nil {
+		return fmt.Errorf("failed to update email category by Gmail message ID: %w", err)
 	}
 
 	return nil

@@ -14,4 +14,5 @@ type AccountRepository interface {
 	Create(ctx context.Context, email, name string, token *oauth2.Token) (*entities.Account, error)
 	Update(ctx context.Context, account *entities.Account) error
 	Delete(ctx context.Context, id int64) error
+	UpdateLastSyncHistoryID(ctx context.Context, accountID int64, historyID string) error
 }

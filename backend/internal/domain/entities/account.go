@@ -7,14 +7,15 @@ import (
 )
 
 type Account struct {
-	ID           int64     `json:"id"`
-	Email        string    `json:"email"`
-	Name         string    `json:"name"`
-	AccessToken  string    `json:"-"`
-	RefreshToken string    `json:"-"`
-	TokenExpiry  time.Time `json:"-"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID                 int64     `json:"id"`
+	Email              string    `json:"email"`
+	Name               string    `json:"name"`
+	AccessToken        string    `json:"-"`
+	RefreshToken       string    `json:"-"`
+	TokenExpiry        time.Time `json:"-"`
+	LastSyncHistoryID  *string   `json:"-"`
+	CreatedAt          time.Time `json:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at"`
 }
 
 type UserInfo struct {

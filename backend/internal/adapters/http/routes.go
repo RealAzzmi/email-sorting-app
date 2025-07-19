@@ -9,6 +9,7 @@ import (
 func SetupRoutes(
 	authHandler *handlers.AuthHandler,
 	accountHandler *handlers.AccountHandler,
+	categoryHandler *handlers.CategoryHandler,
 	emailHandler *handlers.EmailHandler,
 ) *gin.Engine {
 	router := gin.Default()
@@ -24,6 +25,9 @@ func SetupRoutes(
 	// Account routes
 	router.GET("/accounts", accountHandler.GetAccounts)
 	router.DELETE("/accounts/:id", accountHandler.DeleteAccount)
+
+	// Category routes
+	router.GET("/accounts/:id/categories", categoryHandler.GetAccountCategories)
 
 	// Email routes
 	router.GET("/accounts/:id/emails", emailHandler.GetAccountEmails)

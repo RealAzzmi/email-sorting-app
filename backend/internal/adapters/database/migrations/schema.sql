@@ -5,6 +5,7 @@ create table accounts (
     access_token text not null,
     refresh_token text,
     token_expiry timestamp with time zone,
+    last_sync_history_id varchar(64),
     created_at timestamp with time zone not null default now(),
     updated_at timestamp with time zone not null default now()
 );
