@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/email-sorting-app/internal/domain/repositories"
 	"github.com/email-sorting-app/internal/usecases"
 	"github.com/gin-gonic/gin"
 )
@@ -25,11 +26,44 @@ func (h *EmailHandler) GetAccountEmails(c *gin.Context) {
 		return
 	}
 
-	emails, err := h.emailUsecase.GetAccountEmails(c.Request.Context(), accountID)
+	// Parse pagination parameters
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+
+	// Validate pagination parameters
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+
+	params := repositories.PaginationParams{
+		Page:     page,
+		PageSize: pageSize,
+	}
+
+	paginatedEmails, err := h.emailUsecase.GetAccountEmailsPaginated(c.Request.Context(), accountID, params)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"emails": emails})
+	c.JSON(http.StatusOK, paginatedEmails)
+}
+
+func (h *EmailHandler) RefreshAccountEmails(c *gin.Context) {
+	accountID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid account ID"})
+		return
+	}
+
+	err = h.emailUsecase.RefreshAccountEmails(c.Request.Context(), accountID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Emails refreshed successfully"})
 }

@@ -3,8 +3,10 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"math"
 
 	"github.com/email-sorting-app/internal/domain/entities"
+	"github.com/email-sorting-app/internal/domain/repositories"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -142,6 +144,69 @@ func (r *EmailRepository) BulkCreate(ctx context.Context, emails []entities.Emai
 		if err != nil {
 			return fmt.Errorf("failed to execute batch insert at index %d: %w", i, err)
 		}
+	}
+
+	return nil
+}
+
+func (r *EmailRepository) GetByAccountIDPaginated(ctx context.Context, accountID int64, params repositories.PaginationParams) (*repositories.PaginatedEmails, error) {
+	// Get total count
+	var totalCount int64
+	err := r.db.QueryRow(ctx, `
+		SELECT COUNT(*) FROM emails WHERE account_id = $1
+	`, accountID).Scan(&totalCount)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get total count: %w", err)
+	}
+
+	// Calculate offset
+	offset := (params.Page - 1) * params.PageSize
+	
+	// Get paginated emails
+	rows, err := r.db.Query(ctx, `
+		SELECT id, account_id, category_id, gmail_message_id, sender, subject, body, 
+		       ai_summary, received_at, is_archived_in_gmail, unsubscribe_link, created_at, updated_at
+		FROM emails 
+		WHERE account_id = $1 
+		ORDER BY received_at DESC
+		LIMIT $2 OFFSET $3
+	`, accountID, params.PageSize, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query paginated emails: %w", err)
+	}
+	defer rows.Close()
+
+	var emails []entities.Email
+	for rows.Next() {
+		var email entities.Email
+		err := rows.Scan(
+			&email.ID, &email.AccountID, &email.CategoryID, &email.GmailMessageID,
+			&email.Sender, &email.Subject, &email.Body, &email.AISummary,
+			&email.ReceivedAt, &email.IsArchivedInGmail, &email.UnsubscribeLink,
+			&email.CreatedAt, &email.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan email: %w", err)
+		}
+		emails = append(emails, email)
+	}
+
+	// Calculate total pages
+	totalPages := int(math.Ceil(float64(totalCount) / float64(params.PageSize)))
+
+	return &repositories.PaginatedEmails{
+		Emails:     emails,
+		TotalCount: totalCount,
+		Page:       params.Page,
+		PageSize:   params.PageSize,
+		TotalPages: totalPages,
+	}, nil
+}
+
+func (r *EmailRepository) DeleteByAccountID(ctx context.Context, accountID int64) error {
+	_, err := r.db.Exec(ctx, "DELETE FROM emails WHERE account_id = $1", accountID)
+	if err != nil {
+		return fmt.Errorf("failed to delete emails by account ID: %w", err)
 	}
 
 	return nil

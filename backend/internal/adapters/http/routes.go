@@ -27,6 +27,7 @@ func SetupRoutes(
 
 	// Email routes
 	router.GET("/accounts/:id/emails", emailHandler.GetAccountEmails)
+	router.POST("/accounts/:id/emails/refresh", emailHandler.RefreshAccountEmails)
 
 	return router
 }

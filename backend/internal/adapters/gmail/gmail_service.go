@@ -55,6 +55,55 @@ func (s *GmailService) ListMessages(ctx context.Context, token *oauth2.Token, ma
 	return gmailMessages, nil
 }
 
+func (s *GmailService) ListAllMessages(ctx context.Context, token *oauth2.Token) ([]entities.GmailMessage, error) {
+	client := s.oauthConfig.Client(ctx, token)
+	srv, err := gmail.NewService(ctx, option.WithHTTPClient(client))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Gmail service: %w", err)
+	}
+
+	var allMessages []entities.GmailMessage
+	pageToken := ""
+
+	for {
+		req := srv.Users.Messages.List("me").MaxResults(500) // Gmail's max per request
+		if pageToken != "" {
+			req = req.PageToken(pageToken)
+		}
+
+		messages, err := req.Do()
+		if err != nil {
+			return nil, fmt.Errorf("failed to list messages: %w", err)
+		}
+
+		// Process messages in batches to avoid overwhelming the API
+		for _, message := range messages.Messages {
+			msg, err := srv.Users.Messages.Get("me", message.Id).Do()
+			if err != nil {
+				continue // Skip this email if we can't fetch it
+			}
+
+			gmailMsg := entities.GmailMessage{
+				ID:         message.Id,
+				Sender:     s.getHeaderValue(msg.Payload.Headers, "From"),
+				Subject:    s.getHeaderValue(msg.Payload.Headers, "Subject"),
+				Body:       s.extractBody(msg.Payload),
+				ReceivedAt: time.Unix(msg.InternalDate/1000, 0),
+			}
+
+			allMessages = append(allMessages, gmailMsg)
+		}
+
+		// Check if there are more pages
+		if messages.NextPageToken == "" {
+			break
+		}
+		pageToken = messages.NextPageToken
+	}
+
+	return allMessages, nil
+}
+
 func (s *GmailService) GetMessage(ctx context.Context, token *oauth2.Token, messageID string) (*entities.GmailMessage, error) {
 	client := s.oauthConfig.Client(ctx, token)
 	srv, err := gmail.NewService(ctx, option.WithHTTPClient(client))

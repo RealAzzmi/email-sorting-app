@@ -20,6 +20,14 @@ interface Email {
   received_at: string;
 }
 
+interface PaginatedEmails {
+  emails: Email[];
+  total_count: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
 export default function DashboardPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
@@ -27,6 +35,11 @@ export default function DashboardPage() {
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
   const [loading, setLoading] = useState(true);
   const [emailsLoading, setEmailsLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const pageSize = 20;
 
   useEffect(() => {
     fetchAccounts();
@@ -46,17 +59,23 @@ export default function DashboardPage() {
     }
   };
 
-  const fetchAccountEmails = async (accountId: number) => {
+  const fetchAccountEmails = async (accountId: number, page: number = 1) => {
     setEmailsLoading(true);
     try {
-      const response = await fetch(`http://localhost:8080/accounts/${accountId}/emails`, {
+      const response = await fetch(`http://localhost:8080/accounts/${accountId}/emails?page=${page}&page_size=${pageSize}`, {
         credentials: 'include',
       });
-      const data = await response.json();
+      const data: PaginatedEmails = await response.json();
       setEmails(data.emails || []);
+      setCurrentPage(data.page);
+      setTotalPages(data.total_pages);
+      setTotalCount(data.total_count);
     } catch (error) {
       console.error('Failed to fetch emails:', error);
       setEmails([]);
+      setCurrentPage(1);
+      setTotalPages(1);
+      setTotalCount(0);
     } finally {
       setEmailsLoading(false);
     }
@@ -65,7 +84,39 @@ export default function DashboardPage() {
   const handleAccountSelect = (account: Account) => {
     setSelectedAccount(account);
     setSelectedEmail(null);
-    fetchAccountEmails(account.id);
+    setCurrentPage(1);
+    fetchAccountEmails(account.id, 1);
+  };
+
+  const handleRefreshEmails = async () => {
+    if (!selectedAccount) return;
+    
+    setRefreshing(true);
+    try {
+      const response = await fetch(`http://localhost:8080/accounts/${selectedAccount.id}/emails/refresh`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      
+      if (response.ok) {
+        // After refresh, fetch the first page
+        setCurrentPage(1);
+        await fetchAccountEmails(selectedAccount.id, 1);
+      } else {
+        console.error('Failed to refresh emails');
+      }
+    } catch (error) {
+      console.error('Failed to refresh emails:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const handlePageChange = (page: number) => {
+    if (selectedAccount && page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+      fetchAccountEmails(selectedAccount.id, page);
+    }
   };
 
   const handleConnectNewAccount = () => {
@@ -208,9 +259,32 @@ export default function DashboardPage() {
             {selectedAccount ? (
               <div className="bg-white border border-gray-200 rounded-lg">
                 <div className="border-b border-gray-200 px-6 py-4">
-                  <h2 className="text-lg font-medium text-black">
-                    Emails for {selectedAccount.email}
-                  </h2>
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h2 className="text-lg font-medium text-black">
+                        Emails for {selectedAccount.email}
+                      </h2>
+                      {totalCount > 0 && (
+                        <p className="text-sm text-gray-600">
+                          {totalCount} emails total
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      onClick={handleRefreshEmails}
+                      disabled={refreshing || emailsLoading}
+                      className="px-4 py-2 bg-black text-white rounded-md hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {refreshing ? (
+                        <div className="flex items-center">
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                          Refreshing...
+                        </div>
+                      ) : (
+                        'Refresh'
+                      )}
+                    </button>
+                  </div>
                 </div>
                 
                 {emailsLoading ? (
@@ -268,6 +342,55 @@ export default function DashboardPage() {
                         </div>
                       </div>
                     ))}
+                  </div>
+                )}
+                
+                {/* Pagination */}
+                {!emailsLoading && !selectedEmail && emails.length > 0 && totalPages > 1 && (
+                  <div className="border-t border-gray-200 px-6 py-4">
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm text-gray-600">
+                        Page {currentPage} of {totalPages}
+                      </div>
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => handlePageChange(currentPage - 1)}
+                          disabled={currentPage <= 1}
+                          className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
+                        >
+                          Previous
+                        </button>
+                        
+                        {/* Page numbers */}
+                        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                          const startPage = Math.max(1, currentPage - 2);
+                          const pageNum = startPage + i;
+                          if (pageNum > totalPages) return null;
+                          
+                          return (
+                            <button
+                              key={pageNum}
+                              onClick={() => handlePageChange(pageNum)}
+                              className={`px-3 py-1 text-sm rounded transition-colors ${
+                                pageNum === currentPage
+                                  ? 'bg-black text-white'
+                                  : 'border border-gray-300 hover:bg-gray-50'
+                              }`}
+                            >
+                              {pageNum}
+                            </button>
+                          );
+                        })}
+                        
+                        <button
+                          onClick={() => handlePageChange(currentPage + 1)}
+                          disabled={currentPage >= totalPages}
+                          className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>

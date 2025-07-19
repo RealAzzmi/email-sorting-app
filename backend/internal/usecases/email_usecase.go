@@ -56,6 +56,44 @@ func (u *EmailUsecase) GetAccountEmails(ctx context.Context, accountID int64) ([
 	return emails, nil
 }
 
+func (u *EmailUsecase) GetAccountEmailsPaginated(ctx context.Context, accountID int64, params repositories.PaginationParams) (*repositories.PaginatedEmails, error) {
+	// First, check if account exists
+	_, err := u.accountRepo.GetByID(ctx, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("account not found: %w", err)
+	}
+
+	// Get paginated emails from database
+	paginatedEmails, err := u.emailRepo.GetByAccountIDPaginated(ctx, accountID, params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get paginated emails: %w", err)
+	}
+
+	return paginatedEmails, nil
+}
+
+func (u *EmailUsecase) RefreshAccountEmails(ctx context.Context, accountID int64) error {
+	// First, check if account exists
+	account, err := u.accountRepo.GetByID(ctx, accountID)
+	if err != nil {
+		return fmt.Errorf("account not found: %w", err)
+	}
+
+	// Delete existing emails for this account
+	err = u.emailRepo.DeleteByAccountID(ctx, accountID)
+	if err != nil {
+		return fmt.Errorf("failed to delete existing emails: %w", err)
+	}
+
+	// Sync all emails from Gmail
+	err = u.syncAllEmailsFromGmail(ctx, account)
+	if err != nil {
+		return fmt.Errorf("failed to sync emails from Gmail: %w", err)
+	}
+
+	return nil
+}
+
 func (u *EmailUsecase) syncEmailsFromGmail(ctx context.Context, account *entities.Account) error {
 	token := account.ToOAuth2Token()
 
@@ -85,6 +123,39 @@ func (u *EmailUsecase) syncEmailsFromGmail(ctx context.Context, account *entitie
 			}
 			emailsToCreate = append(emailsToCreate, email)
 		}
+	}
+
+	if len(emailsToCreate) > 0 {
+		err = u.emailRepo.BulkCreate(ctx, emailsToCreate)
+		if err != nil {
+			return fmt.Errorf("failed to bulk create emails: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (u *EmailUsecase) syncAllEmailsFromGmail(ctx context.Context, account *entities.Account) error {
+	token := account.ToOAuth2Token()
+
+	// Get all messages from Gmail using pagination
+	gmailMessages, err := u.gmailService.ListAllMessages(ctx, token)
+	if err != nil {
+		return fmt.Errorf("failed to list all Gmail messages: %w", err)
+	}
+
+	var emailsToCreate []entities.Email
+
+	for _, gmailMsg := range gmailMessages {
+		email := entities.Email{
+			AccountID:      account.ID,
+			GmailMessageID: gmailMsg.ID,
+			Sender:         gmailMsg.Sender,
+			Subject:        gmailMsg.Subject,
+			Body:           gmailMsg.Body,
+			ReceivedAt:     gmailMsg.ReceivedAt,
+		}
+		emailsToCreate = append(emailsToCreate, email)
 	}
 
 	if len(emailsToCreate) > 0 {

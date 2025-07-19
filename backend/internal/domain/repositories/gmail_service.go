@@ -9,6 +9,7 @@ import (
 
 type GmailService interface {
 	ListMessages(ctx context.Context, token *oauth2.Token, maxResults int64) ([]entities.GmailMessage, error)
+	ListAllMessages(ctx context.Context, token *oauth2.Token) ([]entities.GmailMessage, error)
 	GetMessage(ctx context.Context, token *oauth2.Token, messageID string) (*entities.GmailMessage, error)
 	ArchiveMessage(ctx context.Context, token *oauth2.Token, messageID string) error
 }
