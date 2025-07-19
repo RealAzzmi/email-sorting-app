@@ -21,7 +21,7 @@ CREATE TABLE categories (
 create table emails (
     id bigserial primary key,
     account_id bigint not null references accounts(id) on delete cascade,
-    category_id bigint not null references categories(id) on delete set null,
+    category_id bigint references categories(id) on delete set null,
     gmail_message_id varchar(256) unique not null,
     sender text,
     subject text,
