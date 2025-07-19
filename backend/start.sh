@@ -8,4 +8,4 @@ if [ -f .env ]; then
 fi
 
 # Start the Go application
-go run main.go
+go run cmd/server/main.go

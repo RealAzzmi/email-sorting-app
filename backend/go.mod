@@ -1,4 +1,4 @@
-module email-sorting-app
+module github.com/email-sorting-app
 
 go 1.23
 
