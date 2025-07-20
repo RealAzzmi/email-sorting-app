@@ -20,6 +20,8 @@ interface Email {
   sender: string;
   subject: string;
   body: string;
+  ai_summary?: string;
+  unsubscribe_link?: string;
   received_at: string;
 }
 
@@ -119,6 +121,9 @@ export default function DashboardPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+  const [showAISummary, setShowAISummary] = useState(false);
+  const [selectedEmailIds, setSelectedEmailIds] = useState<Set<number>>(new Set());
+  const [isUnsubscribing, setIsUnsubscribing] = useState(false);
   const pageSize = 20;
 
   const fetchAccounts = useCallback(async () => {
@@ -190,6 +195,7 @@ export default function DashboardPage() {
     setSelectedAccount(account);
     setSelectedEmail(null);
     setSelectedCategory(null);
+    setSelectedEmailIds(new Set());
     setCurrentPage(1);
     fetchAccountEmails(account.id, 1);
     fetchAccountCategories(account.id);
@@ -268,6 +274,7 @@ export default function DashboardPage() {
     
     setSelectedCategory(category);
     setSelectedEmail(null);
+    setSelectedEmailIds(new Set());
     setCurrentPage(1);
     
     // Fetch emails for this category
@@ -349,6 +356,7 @@ export default function DashboardPage() {
     if (!selectedAccount) return;
     
     setSelectedCategory(null);
+    setSelectedEmailIds(new Set());
     setCurrentPage(1);
     fetchAccountEmails(selectedAccount.id, 1);
   };
@@ -465,6 +473,242 @@ export default function DashboardPage() {
       } catch (error) {
         console.error('Failed to delete account:', error);
       }
+    }
+  };
+
+  const handleGenerateAISummary = async (emailId: number) => {
+    try {
+      const response = await fetch(`http://localhost:8080/emails/${emailId}/summary`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      
+      if (response.ok) {
+        // Refresh the current view to get the updated email with AI summary
+        if (selectedCategory) {
+          const emailResponse = await fetch(`http://localhost:8080/accounts/${selectedAccount!.id}/categories/${selectedCategory.id}/emails?page=${currentPage}&page_size=${pageSize}`, {
+            credentials: 'include',
+          });
+          const emailData = await emailResponse.json();
+          setEmails(emailData.emails || []);
+          
+          // Update selected email if it's the one we generated summary for
+          if (selectedEmail && selectedEmail.id === emailId) {
+            const updatedEmail = emailData.emails.find((e: Email) => e.id === emailId);
+            if (updatedEmail) {
+              setSelectedEmail(updatedEmail);
+            }
+          }
+        } else {
+          fetchAccountEmails(selectedAccount!.id, currentPage);
+          
+          // Update selected email if it's the one we generated summary for
+          if (selectedEmail && selectedEmail.id === emailId) {
+            const emailResponse = await fetch(`http://localhost:8080/accounts/${selectedAccount!.id}/emails?page=${currentPage}&page_size=${pageSize}`, {
+              credentials: 'include',
+            });
+            const emailData = await emailResponse.json();
+            const updatedEmail = emailData.emails.find((e: Email) => e.id === emailId);
+            if (updatedEmail) {
+              setSelectedEmail(updatedEmail);
+            }
+          }
+        }
+      } else {
+        console.error('Failed to generate AI summary');
+      }
+    } catch (error) {
+      console.error('Failed to generate AI summary:', error);
+    }
+  };
+
+  const handleCategorizeWithAI = async (emailId: number) => {
+    try {
+      const response = await fetch(`http://localhost:8080/emails/${emailId}/categorize`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      
+      if (response.ok) {
+        // Refresh the current view to get the updated email with new categories
+        if (selectedCategory) {
+          const emailResponse = await fetch(`http://localhost:8080/accounts/${selectedAccount!.id}/categories/${selectedCategory.id}/emails?page=${currentPage}&page_size=${pageSize}`, {
+            credentials: 'include',
+          });
+          const emailData = await emailResponse.json();
+          setEmails(emailData.emails || []);
+          
+          // Update selected email if it's the one we categorized
+          if (selectedEmail && selectedEmail.id === emailId) {
+            const updatedEmail = emailData.emails.find((e: Email) => e.id === emailId);
+            if (updatedEmail) {
+              setSelectedEmail(updatedEmail);
+            }
+          }
+        } else {
+          fetchAccountEmails(selectedAccount!.id, currentPage);
+          
+          // Update selected email if it's the one we categorized
+          if (selectedEmail && selectedEmail.id === emailId) {
+            const emailResponse = await fetch(`http://localhost:8080/accounts/${selectedAccount!.id}/emails?page=${currentPage}&page_size=${pageSize}`, {
+              credentials: 'include',
+            });
+            const emailData = await emailResponse.json();
+            const updatedEmail = emailData.emails.find((e: Email) => e.id === emailId);
+            if (updatedEmail) {
+              setSelectedEmail(updatedEmail);
+            }
+          }
+        }
+        
+        // Also refresh categories in case new ones were created
+        await fetchAccountCategories(selectedAccount!.id);
+      } else {
+        const errorData = await response.json();
+        console.error('Failed to categorize email:', errorData.error);
+        alert(errorData.error || 'Failed to categorize email');
+      }
+    } catch (error) {
+      console.error('Failed to categorize email:', error);
+      alert('Failed to categorize email');
+    }
+  };
+
+  const handleSelectEmail = (emailId: number) => {
+    const newSelected = new Set(selectedEmailIds);
+    if (newSelected.has(emailId)) {
+      newSelected.delete(emailId);
+    } else {
+      newSelected.add(emailId);
+    }
+    setSelectedEmailIds(newSelected);
+  };
+
+  const handleSelectAll = () => {
+    if (selectedEmailIds.size === emails.length) {
+      setSelectedEmailIds(new Set());
+    } else {
+      setSelectedEmailIds(new Set(emails.map(email => email.id)));
+    }
+  };
+
+  const handleSingleUnsubscribe = async (emailId: number) => {
+    if (!confirm('Are you sure you want to unsubscribe from this email?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`http://localhost:8080/emails/${emailId}/unsubscribe`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          alert('Successfully unsubscribed!');
+        } else {
+          let errorMsg = 'Unsubscribe failed';
+          if (result.message) {
+            errorMsg += `: ${result.message}`;
+          }
+          if (result.error_type) {
+            errorMsg += ` (${result.error_type})`;
+          }
+          alert(errorMsg);
+        }
+        
+        // Refresh emails view
+        if (selectedCategory) {
+          handleCategorySelect(selectedCategory);
+        } else {
+          fetchAccountEmails(selectedAccount!.id, currentPage);
+        }
+      } else {
+        const errorData = await response.json();
+        console.error('Failed to unsubscribe:', errorData.error);
+        alert('Failed to unsubscribe: ' + (errorData.error || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Failed to unsubscribe:', error);
+      alert('Failed to unsubscribe: Network error');
+    }
+  };
+
+  const handleBulkUnsubscribe = async () => {
+    if (selectedEmailIds.size === 0) {
+      alert('Please select emails to unsubscribe from');
+      return;
+    }
+
+    if (!confirm(`Are you sure you want to unsubscribe from ${selectedEmailIds.size} emails?`)) {
+      return;
+    }
+
+    setIsUnsubscribing(true);
+    try {
+      const response = await fetch('http://localhost:8080/emails/bulk-unsubscribe', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          email_ids: Array.from(selectedEmailIds)
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const results = data.results;
+        
+        // Count successful and failed unsubscribes and collect error details
+        let successCount = 0;
+        let failureCount = 0;
+        const failureMessages: string[] = [];
+        
+        Object.entries(results as Record<string, {success: boolean, message?: string, error_type?: string}>).forEach(([emailId, result]) => {
+          if (result.success) {
+            successCount++;
+          } else {
+            failureCount++;
+            if (result.message) {
+              failureMessages.push(`Email ${emailId}: ${result.message}`);
+            } else {
+              failureMessages.push(`Email ${emailId}: Unknown error`);
+            }
+          }
+        });
+
+        // Show detailed results
+        let message = `Unsubscribe completed: ${successCount} successful, ${failureCount} failed`;
+        if (failureCount > 0 && failureMessages.length > 0) {
+          message += '\n\nFailures:\n' + failureMessages.slice(0, 5).join('\n');
+          if (failureMessages.length > 5) {
+            message += `\n... and ${failureMessages.length - 5} more`;
+          }
+        }
+        alert(message);
+        
+        // Clear selection
+        setSelectedEmailIds(new Set());
+        
+        // Refresh emails view
+        if (selectedCategory) {
+          handleCategorySelect(selectedCategory);
+        } else {
+          fetchAccountEmails(selectedAccount!.id, currentPage);
+        }
+      } else {
+        const errorData = await response.json();
+        console.error('Failed to bulk unsubscribe:', errorData.error);
+        alert('Failed to unsubscribe: ' + (errorData.error || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Failed to bulk unsubscribe:', error);
+      alert('Failed to unsubscribe: Network error');
+    } finally {
+      setIsUnsubscribing(false);
     }
   };
 
@@ -692,20 +936,59 @@ export default function DashboardPage() {
                         </p>
                       )}
                     </div>
-                    <button
-                      onClick={handleRefreshEmails}
-                      disabled={refreshing || emailsLoading}
-                      className="px-4 py-2 bg-black text-white rounded-md hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      {refreshing ? (
-                        <div className="flex items-center">
-                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                          Refreshing...
+                    <div className="flex gap-2">
+                      {selectedEmailIds.size > 0 && (
+                        <div className="flex items-center gap-2 bg-blue-50 px-3 py-2 rounded-md">
+                          <span className="text-sm text-blue-700 font-medium">
+                            {selectedEmailIds.size} selected
+                          </span>
+                          <button
+                            onClick={handleBulkUnsubscribe}
+                            disabled={isUnsubscribing}
+                            className="px-3 py-1 text-sm bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          >
+                            {isUnsubscribing ? (
+                              <div className="flex items-center">
+                                <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin mr-1"></div>
+                                Unsubscribing...
+                              </div>
+                            ) : (
+                              'Unsubscribe'
+                            )}
+                          </button>
+                          <button
+                            onClick={() => setSelectedEmailIds(new Set())}
+                            className="px-3 py-1 text-sm bg-gray-400 text-white rounded-md hover:bg-gray-500 transition-colors"
+                          >
+                            Clear
+                          </button>
                         </div>
-                      ) : (
-                        'Refresh'
                       )}
-                    </button>
+                      <button
+                        onClick={() => setShowAISummary(!showAISummary)}
+                        className={`px-4 py-2 text-sm rounded-md transition-colors ${
+                          showAISummary 
+                            ? 'bg-gray-800 text-white hover:bg-gray-700' 
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        {showAISummary ? 'Show Email Body' : 'Show AI Summary'}
+                      </button>
+                      <button
+                        onClick={handleRefreshEmails}
+                        disabled={refreshing || emailsLoading}
+                        className="px-4 py-2 bg-black text-white rounded-md hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {refreshing ? (
+                          <div className="flex items-center">
+                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                            Refreshing...
+                          </div>
+                        ) : (
+                          'Refresh'
+                        )}
+                      </button>
+                    </div>
                   </div>
                 </div>
                 
@@ -720,15 +1003,34 @@ export default function DashboardPage() {
                   </div>
                 ) : selectedEmail ? (
                   <div className="p-6">
-                    <button
-                      onClick={() => setSelectedEmail(null)}
-                      className="inline-flex items-center gap-2 mb-6 px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 hover:text-gray-900 rounded-lg transition-colors font-medium"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                      </svg>
-                      Back
-                    </button>
+                    <div className="flex justify-between items-center mb-6">
+                      <button
+                        onClick={() => setSelectedEmail(null)}
+                        className="inline-flex items-center gap-2 px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 hover:text-gray-900 rounded-lg transition-colors font-medium"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                        </svg>
+                        Back
+                      </button>
+                      
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleCategorizeWithAI(selectedEmail.id)}
+                          className="px-3 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium"
+                        >
+                          🤖 Categorize with AI
+                        </button>
+                        {!selectedEmail.ai_summary && (
+                          <button
+                            onClick={() => handleGenerateAISummary(selectedEmail.id)}
+                            className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                          >
+                            ✨ Generate Summary
+                          </button>
+                        )}
+                      </div>
+                    </div>
                     <div className="space-y-6">
                       <div className="space-y-3">
                         <div className="flex items-start gap-3">
@@ -760,15 +1062,45 @@ export default function DashboardPage() {
                       </div>
                       <div className="mt-8">
                         <div className="bg-white p-6 rounded-lg">
-                          {selectedEmail.body ? (
-                            <div 
-                              className="text-sm text-gray-800 leading-relaxed"
-                              dangerouslySetInnerHTML={{ 
-                                __html: sanitizeAndRenderEmailBody(selectedEmail.body)
-                              }}
-                            />
+                          {showAISummary ? (
+                            selectedEmail.ai_summary ? (
+                              <div className="text-sm text-gray-800 leading-relaxed">
+                                <div className="bg-blue-50 border-l-4 border-blue-400 p-4 mb-4">
+                                  <div className="flex">
+                                    <div className="flex-shrink-0">
+                                      <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                      </svg>
+                                    </div>
+                                    <div className="ml-3">
+                                      <p className="text-sm text-blue-800 font-medium">AI Summary</p>
+                                    </div>
+                                  </div>
+                                </div>
+                                <p className="text-gray-800">{selectedEmail.ai_summary}</p>
+                              </div>
+                            ) : (
+                              <div className="text-center py-8">
+                                <p className="text-gray-500 mb-4">No AI summary available</p>
+                                <button
+                                  onClick={() => handleGenerateAISummary(selectedEmail.id)}
+                                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                                >
+                                  Generate AI Summary
+                                </button>
+                              </div>
+                            )
                           ) : (
-                            <p className="text-sm text-gray-500 italic">No content available</p>
+                            selectedEmail.body ? (
+                              <div 
+                                className="text-sm text-gray-800 leading-relaxed"
+                                dangerouslySetInnerHTML={{ 
+                                  __html: sanitizeAndRenderEmailBody(selectedEmail.body)
+                                }}
+                              />
+                            ) : (
+                              <p className="text-sm text-gray-500 italic">No content available</p>
+                            )
                           )}
                         </div>
                       </div>
@@ -776,18 +1108,55 @@ export default function DashboardPage() {
                   </div>
                 ) : (
                   <div className="space-y-1">
+                    {/* Select All Header */}
+                    {emails.length > 0 && (
+                      <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedEmailIds.size === emails.length && emails.length > 0}
+                            onChange={handleSelectAll}
+                            className="w-4 h-4 text-black border-gray-300 rounded focus:ring-black focus:ring-2"
+                          />
+                          <span className="text-sm font-medium text-gray-700">
+                            Select All ({emails.length})
+                          </span>
+                        </div>
+                      </div>
+                    )}
                     {emails.map((email) => (
                       <div
                         key={email.id}
-                        onClick={() => setSelectedEmail(email)}
-                        className="group px-6 py-4 hover:bg-gray-50 cursor-pointer transition-all duration-200 ease-in-out"
+                        className="group px-6 py-4 hover:bg-gray-50 transition-all duration-200 ease-in-out"
                       >
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1 min-w-0 space-y-1">
+                        <div className="flex items-start gap-4">
+                          <input
+                            type="checkbox"
+                            checked={selectedEmailIds.has(email.id)}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              handleSelectEmail(email.id);
+                            }}
+                            className="w-4 h-4 text-black border-gray-300 rounded focus:ring-black focus:ring-2 mt-1"
+                          />
+                          <div 
+                            className="flex-1 min-w-0 space-y-1 cursor-pointer"
+                            onClick={() => setSelectedEmail(email)}
+                          >
                             <div className="flex items-center gap-3">
-                              <h3 className="font-semibold text-black text-base truncate group-hover:text-gray-900">
-                                {email.subject || '(No Subject)'}
-                              </h3>
+                              <div className="flex items-center gap-2">
+                                <h3 className="font-semibold text-black text-base truncate group-hover:text-gray-900">
+                                  {email.subject || '(No Subject)'}
+                                </h3>
+                                {email.unsubscribe_link && (
+                                  <span 
+                                    className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-600 border border-red-200"
+                                    title="Unsubscribe available"
+                                  >
+                                    📧
+                                  </span>
+                                )}
+                              </div>
                               {email.category_ids && email.category_ids.length > 0 && (
                                 <div className="flex flex-wrap gap-1">
                                   {getCategoryNames(email.category_ids).slice(0, 2).map((categoryName, index) => (
@@ -806,6 +1175,11 @@ export default function DashboardPage() {
                             <p className="text-sm text-gray-600 truncate font-medium">
                               {email.sender}
                             </p>
+                            {showAISummary && email.ai_summary && (
+                              <p className="text-xs text-blue-600 font-normal italic truncate">
+                                AI: {email.ai_summary}
+                              </p>
+                            )}
                             <p className="text-xs text-gray-500 font-normal">
                               {new Date(email.received_at).toLocaleString('en-US', {
                                 month: 'short',
@@ -817,7 +1191,43 @@ export default function DashboardPage() {
                               })}
                             </p>
                           </div>
-                          <div className="flex-shrink-0">
+                          <div className="flex-shrink-0 flex items-center gap-2">
+                            <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex gap-1">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleCategorizeWithAI(email.id);
+                                }}
+                                className="p-1 text-xs bg-purple-100 text-purple-600 rounded hover:bg-purple-200 transition-colors"
+                                title="Categorize with AI"
+                              >
+                                🤖
+                              </button>
+                              {!email.ai_summary && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleGenerateAISummary(email.id);
+                                  }}
+                                  className="p-1 text-xs bg-blue-100 text-blue-600 rounded hover:bg-blue-200 transition-colors"
+                                  title="Generate AI Summary"
+                                >
+                                  ✨
+                                </button>
+                              )}
+                              {email.unsubscribe_link && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleSingleUnsubscribe(email.id);
+                                  }}
+                                  className="p-1 text-xs bg-red-100 text-red-600 rounded hover:bg-red-200 transition-colors"
+                                  title="Unsubscribe"
+                                >
+                                  📧
+                                </button>
+                              )}
+                            </div>
                             <div className="w-2 h-2 rounded-full bg-gray-300 opacity-0 group-hover:opacity-100 transition-opacity duration-200"></div>
                           </div>
                         </div>

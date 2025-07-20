@@ -5,9 +5,11 @@ import (
 	"encoding/base64"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/email-sorting-app/internal/domain/entities"
+	"github.com/email-sorting-app/internal/domain/repositories"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/gmail/v1"
 	"google.golang.org/api/option"
@@ -15,11 +17,13 @@ import (
 
 type GmailService struct {
 	oauthConfig *oauth2.Config
+	aiService   repositories.AIService
 }
 
-func NewGmailService(oauthConfig *oauth2.Config) *GmailService {
+func NewGmailService(oauthConfig *oauth2.Config, aiService repositories.AIService) *GmailService {
 	return &GmailService{
 		oauthConfig: oauthConfig,
+		aiService:   aiService,
 	}
 }
 
@@ -42,13 +46,16 @@ func (s *GmailService) ListMessages(ctx context.Context, token *oauth2.Token, ma
 			continue // Skip this email if we can't fetch it
 		}
 
+		body := s.extractBody(msg.Payload)
 		gmailMsg := entities.GmailMessage{
-			ID:         message.Id,
-			Sender:     s.getHeaderValue(msg.Payload.Headers, "From"),
-			Subject:    s.getHeaderValue(msg.Payload.Headers, "Subject"),
-			Body:       s.extractBody(msg.Payload),
-			Labels:     msg.LabelIds,
-			ReceivedAt: time.Unix(msg.InternalDate/1000, 0),
+			ID:              message.Id,
+			Sender:          s.getHeaderValue(msg.Payload.Headers, "From"),
+			Subject:         s.getHeaderValue(msg.Payload.Headers, "Subject"),
+			Body:            body,
+			Headers:         s.extractHeaders(msg.Payload.Headers),
+			Labels:          msg.LabelIds,
+			UnsubscribeLink: s.extractUnsubscribeLink(msg.Payload.Headers, body),
+			ReceivedAt:      time.Unix(msg.InternalDate/1000, 0),
 		}
 
 		gmailMessages = append(gmailMessages, gmailMsg)
@@ -85,13 +92,16 @@ func (s *GmailService) ListAllMessages(ctx context.Context, token *oauth2.Token)
 				continue // Skip this email if we can't fetch it
 			}
 
+			body := s.extractBody(msg.Payload)
 			gmailMsg := entities.GmailMessage{
-				ID:         message.Id,
-				Sender:     s.getHeaderValue(msg.Payload.Headers, "From"),
-				Subject:    s.getHeaderValue(msg.Payload.Headers, "Subject"),
-				Body:       s.extractBody(msg.Payload),
-				Labels:     msg.LabelIds,
-				ReceivedAt: time.Unix(msg.InternalDate/1000, 0),
+				ID:              message.Id,
+				Sender:          s.getHeaderValue(msg.Payload.Headers, "From"),
+				Subject:         s.getHeaderValue(msg.Payload.Headers, "Subject"),
+				Body:            body,
+				Headers:         s.extractHeaders(msg.Payload.Headers),
+				Labels:          msg.LabelIds,
+				UnsubscribeLink: s.extractUnsubscribeLink(msg.Payload.Headers, body),
+				ReceivedAt:      time.Unix(msg.InternalDate/1000, 0),
 			}
 
 			allMessages = append(allMessages, gmailMsg)
@@ -119,13 +129,16 @@ func (s *GmailService) GetMessage(ctx context.Context, token *oauth2.Token, mess
 		return nil, fmt.Errorf("failed to get message: %w", err)
 	}
 
+	body := s.extractBody(msg.Payload)
 	gmailMsg := &entities.GmailMessage{
-		ID:         messageID,
-		Sender:     s.getHeaderValue(msg.Payload.Headers, "From"),
-		Subject:    s.getHeaderValue(msg.Payload.Headers, "Subject"),
-		Body:       s.extractBody(msg.Payload),
-		Labels:     msg.LabelIds,
-		ReceivedAt: time.Unix(msg.InternalDate/1000, 0),
+		ID:              messageID,
+		Sender:          s.getHeaderValue(msg.Payload.Headers, "From"),
+		Subject:         s.getHeaderValue(msg.Payload.Headers, "Subject"),
+		Body:            body,
+		Headers:         s.extractHeaders(msg.Payload.Headers),
+		Labels:          msg.LabelIds,
+		UnsubscribeLink: s.extractUnsubscribeLink(msg.Payload.Headers, body),
+		ReceivedAt:      time.Unix(msg.InternalDate/1000, 0),
 	}
 
 	return gmailMsg, nil
@@ -202,13 +215,16 @@ func (s *GmailService) ListHistory(ctx context.Context, token *oauth2.Token, sta
 					continue // Skip if we can't fetch it
 				}
 
+				body := s.extractBody(fullMsg.Payload)
 				gmailMsg := entities.GmailMessage{
-					ID:         msg.Message.Id,
-					Sender:     s.getHeaderValue(fullMsg.Payload.Headers, "From"),
-					Subject:    s.getHeaderValue(fullMsg.Payload.Headers, "Subject"),
-					Body:       s.extractBody(fullMsg.Payload),
-					Labels:     fullMsg.LabelIds,
-					ReceivedAt: time.Unix(fullMsg.InternalDate/1000, 0),
+					ID:              msg.Message.Id,
+					Sender:          s.getHeaderValue(fullMsg.Payload.Headers, "From"),
+					Subject:         s.getHeaderValue(fullMsg.Payload.Headers, "Subject"),
+					Body:            body,
+					Headers:         s.extractHeaders(fullMsg.Payload.Headers),
+					Labels:          fullMsg.LabelIds,
+					UnsubscribeLink: s.extractUnsubscribeLink(fullMsg.Payload.Headers, body),
+					ReceivedAt:      time.Unix(fullMsg.InternalDate/1000, 0),
 				}
 
 				newMessages = append(newMessages, gmailMsg)
@@ -226,13 +242,16 @@ func (s *GmailService) ListHistory(ctx context.Context, token *oauth2.Token, sta
 					continue // Skip if we can't fetch it
 				}
 
+				body := s.extractBody(fullMsg.Payload)
 				gmailMsg := entities.GmailMessage{
-					ID:         labelChange.Message.Id,
-					Sender:     s.getHeaderValue(fullMsg.Payload.Headers, "From"),
-					Subject:    s.getHeaderValue(fullMsg.Payload.Headers, "Subject"),
-					Body:       s.extractBody(fullMsg.Payload),
-					Labels:     fullMsg.LabelIds,
-					ReceivedAt: time.Unix(fullMsg.InternalDate/1000, 0),
+					ID:              labelChange.Message.Id,
+					Sender:          s.getHeaderValue(fullMsg.Payload.Headers, "From"),
+					Subject:         s.getHeaderValue(fullMsg.Payload.Headers, "Subject"),
+					Body:            body,
+					Headers:         s.extractHeaders(fullMsg.Payload.Headers),
+					Labels:          fullMsg.LabelIds,
+					UnsubscribeLink: s.extractUnsubscribeLink(fullMsg.Payload.Headers, body),
+					ReceivedAt:      time.Unix(fullMsg.InternalDate/1000, 0),
 				}
 
 				newMessages = append(newMessages, gmailMsg)
@@ -249,13 +268,16 @@ func (s *GmailService) ListHistory(ctx context.Context, token *oauth2.Token, sta
 					continue // Skip if we can't fetch it
 				}
 
+				body := s.extractBody(fullMsg.Payload)
 				gmailMsg := entities.GmailMessage{
-					ID:         labelChange.Message.Id,
-					Sender:     s.getHeaderValue(fullMsg.Payload.Headers, "From"),
-					Subject:    s.getHeaderValue(fullMsg.Payload.Headers, "Subject"),
-					Body:       s.extractBody(fullMsg.Payload),
-					Labels:     fullMsg.LabelIds,
-					ReceivedAt: time.Unix(fullMsg.InternalDate/1000, 0),
+					ID:              labelChange.Message.Id,
+					Sender:          s.getHeaderValue(fullMsg.Payload.Headers, "From"),
+					Subject:         s.getHeaderValue(fullMsg.Payload.Headers, "Subject"),
+					Body:            body,
+					Headers:         s.extractHeaders(fullMsg.Payload.Headers),
+					Labels:          fullMsg.LabelIds,
+					UnsubscribeLink: s.extractUnsubscribeLink(fullMsg.Payload.Headers, body),
+					ReceivedAt:      time.Unix(fullMsg.InternalDate/1000, 0),
 				}
 
 				newMessages = append(newMessages, gmailMsg)
@@ -312,6 +334,63 @@ func (s *GmailService) getHeaderValue(headers []*gmail.MessagePartHeader, name s
 		}
 	}
 	return ""
+}
+
+func (s *GmailService) extractHeaders(headers []*gmail.MessagePartHeader) map[string]string {
+	headerMap := make(map[string]string)
+	for _, header := range headers {
+		headerMap[header.Name] = header.Value
+	}
+	return headerMap
+}
+
+func (s *GmailService) extractUnsubscribeLink(headers []*gmail.MessagePartHeader, body string) *string {
+	fmt.Printf("📧 extractUnsubscribeLink called\n")
+	
+	// Convert headers to string format for AI
+	headerStr := ""
+	for _, header := range headers {
+		headerStr += fmt.Sprintf("%s: %s\n", header.Name, header.Value)
+	}
+	
+	// Try AI extraction first
+	if s.aiService != nil {
+		fmt.Printf("🤖 AI service found, calling extraction...\n")
+		link, err := s.aiService.ExtractUnsubscribeLink(context.Background(), headerStr, body)
+		fmt.Printf("🤖 AI result: link='%s', err=%v\n", link, err)
+		if err == nil && link != "" {
+			fmt.Printf("🤖 AI found valid link: %s\n", link)
+			return &link
+		}
+	} else {
+		fmt.Printf("❌ AI service is nil - skipping AI extraction\n")
+	}
+	
+	// Fallback to regex-based extraction
+	// First check List-Unsubscribe header
+	listUnsubscribe := s.getHeaderValue(headers, "List-Unsubscribe")
+	if listUnsubscribe != "" {
+		if strings.Contains(listUnsubscribe, "https://") {
+			start := strings.Index(listUnsubscribe, "https://")
+			if start != -1 {
+				remaining := listUnsubscribe[start:]
+				end := strings.Index(remaining, ">")
+				if end == -1 {
+					end = strings.Index(remaining, ",")
+				}
+				if end == -1 {
+					end = len(remaining)
+				}
+				link := strings.TrimSpace(remaining[:end])
+				if link != "" {
+					return &link
+				}
+			}
+		}
+	}
+	
+	fmt.Printf("📧 No unsubscribe link found (AI failed, regex failed)\n")
+	return nil
 }
 
 func (s *GmailService) extractBody(part *gmail.MessagePart) string {

@@ -204,10 +204,10 @@ func (r *EmailRepository) BulkCreate(ctx context.Context, emails []entities.Emai
 	for i, email := range emails {
 		var emailID int64
 		err := tx.QueryRow(ctx, `
-			INSERT INTO emails (account_id, gmail_message_id, sender, subject, body, received_at, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+			INSERT INTO emails (account_id, gmail_message_id, sender, subject, body, ai_summary, unsubscribe_link, received_at, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
 			RETURNING id
-		`, email.AccountID, email.GmailMessageID, email.Sender, email.Subject, email.Body, email.ReceivedAt).Scan(&emailID)
+		`, email.AccountID, email.GmailMessageID, email.Sender, email.Subject, email.Body, email.AISummary, email.UnsubscribeLink, email.ReceivedAt).Scan(&emailID)
 		if err != nil {
 			return fmt.Errorf("failed to insert email at index %d: %w", i, err)
 		}
@@ -486,6 +486,19 @@ func (r *EmailRepository) RemoveEmailFromCategories(ctx context.Context, emailID
 	_, err := r.db.Exec(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("failed to remove email from categories: %w", err)
+	}
+
+	return nil
+}
+
+func (r *EmailRepository) UpdateAISummary(ctx context.Context, emailID int64, summary string) error {
+	_, err := r.db.Exec(ctx, `
+		UPDATE emails 
+		SET ai_summary = $1, updated_at = NOW()
+		WHERE id = $2
+	`, summary, emailID)
+	if err != nil {
+		return fmt.Errorf("failed to update AI summary: %w", err)
 	}
 
 	return nil

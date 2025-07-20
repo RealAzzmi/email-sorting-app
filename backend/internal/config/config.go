@@ -14,6 +14,7 @@ type Config struct {
 	GoogleSecret     string
 	RedirectURL      string
 	Port             string
+	GeminiAPIKey     string
 }
 
 func Load() (*Config, error) {
@@ -23,6 +24,7 @@ func Load() (*Config, error) {
 		GoogleSecret:   getEnv("GOOGLE_CLIENT_SECRET", ""),
 		RedirectURL:    getEnv("REDIRECT_URL", "http://localhost:8080/auth/callback"),
 		Port:           getEnv("PORT", "8080"),
+		GeminiAPIKey:   getEnv("GEMINI_API_KEY", ""),
 	}
 
 	if err := config.validate(); err != nil {
@@ -38,6 +40,9 @@ func (c *Config) validate() error {
 	}
 	if c.GoogleSecret == "" {
 		return fmt.Errorf("GOOGLE_CLIENT_SECRET is required")
+	}
+	if c.GeminiAPIKey == "" {
+		return fmt.Errorf("GEMINI_API_KEY is required")
 	}
 	return nil
 }

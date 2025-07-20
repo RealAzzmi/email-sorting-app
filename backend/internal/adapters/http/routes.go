@@ -35,6 +35,10 @@ func SetupRoutes(
 	router.GET("/accounts/:id/emails", emailHandler.GetAccountEmails)
 	router.POST("/accounts/:id/emails/refresh", emailHandler.RefreshAccountEmails)
 	router.GET("/accounts/:id/categories/:categoryId/emails", emailHandler.GetEmailsByCategory)
+	router.POST("/emails/:emailId/summary", emailHandler.GenerateEmailSummary)
+	router.POST("/emails/:emailId/categorize", emailHandler.CategorizeEmailWithAI)
+	router.POST("/emails/:emailId/unsubscribe", emailHandler.UnsubscribeFromEmail)
+	router.POST("/emails/bulk-unsubscribe", emailHandler.BulkUnsubscribe)
 
 	return router
 }

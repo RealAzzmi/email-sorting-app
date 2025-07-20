@@ -28,6 +28,24 @@ npm start
 npm run lint
 ```
 
+### Backend Development (run from `/backend` directory)
+```bash
+# Start development server
+go run cmd/server/main.go
+
+# Or use the convenience script
+./start.sh
+
+# Build the application
+go build -o email-sorting-app cmd/server/main.go
+
+# Initialize database (requires PostgreSQL running)
+psql -d email_sorting_app -f internal/adapters/database/migrations/schema.sql
+
+# Set up environment (copy .env.example to .env and configure)
+cp .env.example .env
+```
+
 ## Technology Stack
 
 ### Frontend
@@ -39,15 +57,48 @@ npm run lint
 - **Linting**: ESLint with Next.js config
 
 ### Backend
-- **Language**: Go
+- **Language**: Go 1.23
 - **Web Framework**: Gin
-- **Database Driver**: pgx for PostgreSQL
+- **Database Driver**: pgx v5 for PostgreSQL
 - **ORM/Database Interaction**: Raw SQL with pgx
+- **AI Integration**: Google Gemini API for email categorization
+- **OAuth**: Google OAuth2 for Gmail authentication
 
 ### Configuration
 - TypeScript path alias: `@/*` points to `./src/*`
 - ESLint extends `next/core-web-vitals` and `next/typescript`
 - Tailwind CSS with PostCSS integration
+
+## Backend Architecture
+
+The backend follows Clean Architecture with clear separation of concerns:
+
+### Layer Structure
+- **cmd/server/**: Application entry point and dependency injection
+- **internal/domain/**: Core business entities and repository interfaces
+- **internal/usecases/**: Business logic and use case implementations  
+- **internal/adapters/**: External interfaces (HTTP handlers, database, Gmail API)
+
+### Key Components
+- **Repositories**: Data access layer with PostgreSQL using pgx driver
+- **Use Cases**: Business logic layer that orchestrates between repositories and external services
+- **Handlers**: HTTP request/response handling via Gin framework
+- **Gmail Service**: Integration with Google Gmail API for email operations
+- **AI Service**: Google Gemini integration for email categorization and summaries
+
+### Database Schema
+- **accounts**: OAuth-authenticated Gmail accounts with tokens
+- **emails**: Email messages with AI summaries and metadata
+- **categories**: User-defined categories for email organization
+- **email_categories**: Many-to-many relationship between emails and categories
+
+### Environment Setup
+Required environment variables (see `.env.example`):
+- `DATABASE_URL`: PostgreSQL connection string
+- `GOOGLE_CLIENT_ID` & `GOOGLE_CLIENT_SECRET`: Google OAuth credentials
+- `GEMINI_API_KEY`: Google Gemini API key for AI categorization
+- `REDIRECT_URL`: OAuth callback URL
+- `PORT`: Server port (default 8080)
 
 ## Development Guidelines
 

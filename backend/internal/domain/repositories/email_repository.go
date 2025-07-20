@@ -34,4 +34,5 @@ type EmailRepository interface {
 	AddEmailToCategories(ctx context.Context, emailID int64, categoryIDs []int64) error
 	RemoveEmailFromCategories(ctx context.Context, emailID int64, categoryIDs []int64) error
 	GetEmailCategories(ctx context.Context, emailID int64) ([]int64, error)
+	UpdateAISummary(ctx context.Context, emailID int64, summary string) error
 }

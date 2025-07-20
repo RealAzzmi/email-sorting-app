@@ -27,12 +27,14 @@ type EmailCategory struct {
 }
 
 type GmailMessage struct {
-	ID         string
-	Sender     string
-	Subject    string
-	Body       string
-	Labels     []string
-	ReceivedAt time.Time
+	ID              string
+	Sender          string
+	Subject         string
+	Body            string
+	Headers         map[string]string
+	Labels          []string
+	UnsubscribeLink *string
+	ReceivedAt      time.Time
 }
 
 type GmailLabel struct {

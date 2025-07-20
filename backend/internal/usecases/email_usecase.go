@@ -9,10 +9,12 @@ import (
 )
 
 type EmailUsecase struct {
-	emailRepo     repositories.EmailRepository
-	accountRepo   repositories.AccountRepository
-	categoryRepo  repositories.CategoryRepository
-	gmailService  repositories.GmailService
+	emailRepo         repositories.EmailRepository
+	accountRepo       repositories.AccountRepository
+	categoryRepo      repositories.CategoryRepository
+	gmailService      repositories.GmailService
+	aiService         repositories.AIService
+	unsubscribeService repositories.UnsubscribeService
 }
 
 func NewEmailUsecase(
@@ -20,12 +22,16 @@ func NewEmailUsecase(
 	accountRepo repositories.AccountRepository,
 	categoryRepo repositories.CategoryRepository,
 	gmailService repositories.GmailService,
+	aiService repositories.AIService,
+	unsubscribeService repositories.UnsubscribeService,
 ) *EmailUsecase {
 	return &EmailUsecase{
-		emailRepo:    emailRepo,
-		accountRepo:  accountRepo,
-		categoryRepo: categoryRepo,
-		gmailService: gmailService,
+		emailRepo:         emailRepo,
+		accountRepo:       accountRepo,
+		categoryRepo:      categoryRepo,
+		gmailService:      gmailService,
+		aiService:         aiService,
+		unsubscribeService: unsubscribeService,
 	}
 }
 
@@ -119,12 +125,13 @@ func (u *EmailUsecase) syncEmailsFromGmail(ctx context.Context, account *entitie
 
 		if !exists {
 			email := entities.Email{
-				AccountID:      account.ID,
-				GmailMessageID: gmailMsg.ID,
-				Sender:         gmailMsg.Sender,
-				Subject:        gmailMsg.Subject,
-				Body:           gmailMsg.Body,
-				ReceivedAt:     gmailMsg.ReceivedAt,
+				AccountID:       account.ID,
+				GmailMessageID:  gmailMsg.ID,
+				Sender:          gmailMsg.Sender,
+				Subject:         gmailMsg.Subject,
+				Body:            gmailMsg.Body,
+				UnsubscribeLink: gmailMsg.UnsubscribeLink,
+				ReceivedAt:      gmailMsg.ReceivedAt,
 			}
 			emailsToCreate = append(emailsToCreate, email)
 		}
@@ -209,13 +216,14 @@ func (u *EmailUsecase) initialSyncAccountEmails(ctx context.Context, account *en
 		}
 
 		email := entities.Email{
-			AccountID:      account.ID,
-			CategoryIDs:    categoryIDs,
-			GmailMessageID: gmailMsg.ID,
-			Sender:         gmailMsg.Sender,
-			Subject:        gmailMsg.Subject,
-			Body:           gmailMsg.Body,
-			ReceivedAt:     gmailMsg.ReceivedAt,
+			AccountID:       account.ID,
+			CategoryIDs:     categoryIDs,
+			GmailMessageID:  gmailMsg.ID,
+			Sender:          gmailMsg.Sender,
+			Subject:         gmailMsg.Subject,
+			Body:            gmailMsg.Body,
+			UnsubscribeLink: gmailMsg.UnsubscribeLink,
+			ReceivedAt:      gmailMsg.ReceivedAt,
 		}
 		emailsToCreate = append(emailsToCreate, email)
 	}
@@ -302,13 +310,14 @@ func (u *EmailUsecase) incrementalSyncAccountEmails(ctx context.Context, account
 		if !exists {
 			// Create new email
 			email := entities.Email{
-				AccountID:      account.ID,
-				CategoryIDs:    categoryIDs,
-				GmailMessageID: gmailMsg.ID,
-				Sender:         gmailMsg.Sender,
-				Subject:        gmailMsg.Subject,
-				Body:           gmailMsg.Body,
-				ReceivedAt:     gmailMsg.ReceivedAt,
+				AccountID:       account.ID,
+				CategoryIDs:     categoryIDs,
+				GmailMessageID:  gmailMsg.ID,
+				Sender:          gmailMsg.Sender,
+				Subject:         gmailMsg.Subject,
+				Body:            gmailMsg.Body,
+				UnsubscribeLink: gmailMsg.UnsubscribeLink,
+				ReceivedAt:      gmailMsg.ReceivedAt,
 			}
 			emailsToCreate = append(emailsToCreate, email)
 		} else {
@@ -509,4 +518,135 @@ func (u *EmailUsecase) syncGmailLabels(ctx context.Context, accountID int64) err
 	}
 
 	return nil
+}
+
+func (u *EmailUsecase) GenerateEmailSummary(ctx context.Context, emailID int64) error {
+	email, err := u.emailRepo.GetByID(ctx, emailID)
+	if err != nil {
+		return fmt.Errorf("failed to get email: %w", err)
+	}
+
+	if email.AISummary != nil && *email.AISummary != "" {
+		return nil // Summary already exists
+	}
+
+	summary, err := u.aiService.SummarizeEmail(ctx, email)
+	if err != nil {
+		return fmt.Errorf("failed to generate AI summary: %w", err)
+	}
+
+	err = u.emailRepo.UpdateAISummary(ctx, emailID, summary)
+	if err != nil {
+		return fmt.Errorf("failed to update AI summary: %w", err)
+	}
+
+	return nil
+}
+
+func (u *EmailUsecase) CategorizeEmailWithAI(ctx context.Context, emailID int64) error {
+	email, err := u.emailRepo.GetByID(ctx, emailID)
+	if err != nil {
+		return fmt.Errorf("failed to get email: %w", err)
+	}
+
+	// Get account's custom categories for AI categorization
+	categories, err := u.categoryRepo.GetByAccountID(ctx, email.AccountID)
+	if err != nil {
+		return fmt.Errorf("failed to get categories: %w", err)
+	}
+
+	// Filter to only custom categories (exclude system ones)
+	var customCategories []entities.Category
+	for _, cat := range categories {
+		if !u.isSystemCategoryName(cat.Name) {
+			customCategories = append(customCategories, cat)
+		}
+	}
+
+	if len(customCategories) == 0 {
+		return fmt.Errorf("no custom categories available for AI categorization")
+	}
+
+	// Use AI to categorize email
+	aiCategoryIDs, err := u.aiService.CategorizeEmail(ctx, email, customCategories)
+	if err != nil {
+		return fmt.Errorf("failed to categorize email with AI: %w", err)
+	}
+
+	// Merge AI categories with existing categories (from Gmail labels)
+	categoryIDSet := make(map[int64]bool)
+	for _, id := range email.CategoryIDs {
+		categoryIDSet[id] = true
+	}
+	for _, id := range aiCategoryIDs {
+		categoryIDSet[id] = true
+	}
+	
+	var mergedCategoryIDs []int64
+	for id := range categoryIDSet {
+		mergedCategoryIDs = append(mergedCategoryIDs, id)
+	}
+
+	// Update email categories
+	return u.emailRepo.UpdateCategoriesByGmailMessageID(ctx, email.AccountID, email.GmailMessageID, mergedCategoryIDs)
+}
+
+
+func (u *EmailUsecase) isSystemCategoryName(name string) bool {
+	systemCategories := []string{
+		"Inbox", "Sent", "Drafts", "Spam", "Trash", "Starred", "Important",
+	}
+	
+	for _, sysCategory := range systemCategories {
+		if name == sysCategory {
+			return true
+		}
+	}
+	
+	return false
+}
+
+func (u *EmailUsecase) UnsubscribeFromEmail(ctx context.Context, emailID int64) (*repositories.UnsubscribeResult, error) {
+	// Get the email
+	email, err := u.emailRepo.GetByID(ctx, emailID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get email: %w", err)
+	}
+
+	// Use the unsubscribe service
+	result, err := u.unsubscribeService.UnsubscribeFromEmail(ctx, email)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unsubscribe: %w", err)
+	}
+
+	return result, nil
+}
+
+func (u *EmailUsecase) BulkUnsubscribe(ctx context.Context, emailIDs []int64) (map[int64]*repositories.UnsubscribeResult, error) {
+	if len(emailIDs) == 0 {
+		return make(map[int64]*repositories.UnsubscribeResult), nil
+	}
+
+	// Get all emails
+	var emails []*entities.Email
+	for _, emailID := range emailIDs {
+		email, err := u.emailRepo.GetByID(ctx, emailID)
+		if err != nil {
+			// Skip emails that can't be found but continue with others
+			continue
+		}
+		emails = append(emails, email)
+	}
+
+	if len(emails) == 0 {
+		return make(map[int64]*repositories.UnsubscribeResult), fmt.Errorf("no valid emails found")
+	}
+
+	// Use the unsubscribe service for bulk operation
+	results, err := u.unsubscribeService.BulkUnsubscribe(ctx, emails)
+	if err != nil {
+		return nil, fmt.Errorf("failed to bulk unsubscribe: %w", err)
+	}
+
+	return results, nil
 }

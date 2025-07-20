@@ -106,3 +106,76 @@ func (h *EmailHandler) GetEmailsByCategory(c *gin.Context) {
 
 	c.JSON(http.StatusOK, paginatedEmails)
 }
+
+func (h *EmailHandler) GenerateEmailSummary(c *gin.Context) {
+	emailID, err := strconv.ParseInt(c.Param("emailId"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid email ID"})
+		return
+	}
+
+	err = h.emailUsecase.GenerateEmailSummary(c.Request.Context(), emailID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Email summary generated successfully"})
+}
+
+func (h *EmailHandler) CategorizeEmailWithAI(c *gin.Context) {
+	emailID, err := strconv.ParseInt(c.Param("emailId"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid email ID"})
+		return
+	}
+
+	err = h.emailUsecase.CategorizeEmailWithAI(c.Request.Context(), emailID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Email categorized successfully"})
+}
+
+func (h *EmailHandler) UnsubscribeFromEmail(c *gin.Context) {
+	emailID, err := strconv.ParseInt(c.Param("emailId"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid email ID"})
+		return
+	}
+
+	result, err := h.emailUsecase.UnsubscribeFromEmail(c.Request.Context(), emailID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+
+type BulkUnsubscribeRequest struct {
+	EmailIDs []int64 `json:"email_ids" binding:"required"`
+}
+
+func (h *EmailHandler) BulkUnsubscribe(c *gin.Context) {
+	var req BulkUnsubscribeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if len(req.EmailIDs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No email IDs provided"})
+		return
+	}
+
+	results, err := h.emailUsecase.BulkUnsubscribe(c.Request.Context(), req.EmailIDs)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"results": results})
+}
