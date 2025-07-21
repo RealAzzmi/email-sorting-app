@@ -33,7 +33,7 @@ func (g *GeminiService) Close() {
 }
 
 func (g *GeminiService) SummarizeEmail(ctx context.Context, email *entities.Email) (string, error) {
-	model := g.client.GenerativeModel("gemini-2.0-flash-exp")
+	model := g.client.GenerativeModel("models/gemini-2.0-flash")
 
 	prompt := fmt.Sprintf(`Summarize this email in 1-2 sentences. Be concise and focus on the key action items or main points.
 
@@ -61,7 +61,7 @@ func (g *GeminiService) CategorizeEmail(ctx context.Context, email *entities.Ema
 		return []int64{}, nil
 	}
 
-	model := g.client.GenerativeModel("gemini-2.0-flash-exp")
+	model := g.client.GenerativeModel("models/gemini-2.0-flash")
 
 	// Build categories string
 	var categoriesStr strings.Builder
@@ -124,7 +124,7 @@ Categories:`, email.Subject, email.Sender, email.Body, categoriesStr.String())
 }
 
 func (g *GeminiService) AnalyzeUnsubscribePage(ctx context.Context, pageContent, pageURL string) (*repositories.UnsubscribePageAnalysis, error) {
-	model := g.client.GenerativeModel("gemini-2.0-flash-exp")
+	model := g.client.GenerativeModel("models/gemini-2.0-flash")
 
 	prompt := fmt.Sprintf(`Analyze this webpage to determine if it's an unsubscribe page and how to interact with it.
 
@@ -204,7 +204,7 @@ JSON:`, pageURL, pageContent)
 }
 
 func (g *GeminiService) ExtractUnsubscribeLink(ctx context.Context, headers, body string) (string, error) {
-	model := g.client.GenerativeModel("gemini-2.0-flash-exp")
+	model := g.client.GenerativeModel("models/gemini-2.0-flash")
 
 	prompt := fmt.Sprintf(`Find the unsubscribe link in this email. Return only the URL, nothing else.
 

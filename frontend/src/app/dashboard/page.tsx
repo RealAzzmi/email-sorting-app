@@ -124,6 +124,8 @@ export default function DashboardPage() {
   const [showAISummary, setShowAISummary] = useState(false);
   const [selectedEmailIds, setSelectedEmailIds] = useState<Set<number>>(new Set());
   const [isUnsubscribing, setIsUnsubscribing] = useState(false);
+  const [isSummarizing, setIsSummarizing] = useState(false);
+  const [isCategorizing, setIsCategorizing] = useState(false);
   const pageSize = 20;
 
   const fetchAccounts = useCallback(async () => {
@@ -712,6 +714,223 @@ export default function DashboardPage() {
     }
   };
 
+  const retryWithBackoff = async (
+    fn: () => Promise<Response>,
+    maxRetries: number = 3,
+    baseDelay: number = 1000
+  ): Promise<Response> => {
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const response = await fn();
+        if (response.ok || response.status !== 429) {
+          return response;
+        }
+        
+        if (attempt === maxRetries) {
+          return response;
+        }
+        
+        // Exponential backoff with jitter
+        const delay = baseDelay * Math.pow(2, attempt) + Math.random() * 1000;
+        await new Promise(resolve => setTimeout(resolve, delay));
+      } catch (error) {
+        if (attempt === maxRetries) {
+          throw error;
+        }
+        
+        const delay = baseDelay * Math.pow(2, attempt) + Math.random() * 1000;
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+    
+    throw new Error('Max retries exceeded');
+  };
+
+  const handleBulkSummarize = async () => {
+    if (selectedEmailIds.size === 0) {
+      alert('Please select emails to summarize');
+      return;
+    }
+
+    if (!confirm(`Are you sure you want to generate AI summaries for ${selectedEmailIds.size} emails?`)) {
+      return;
+    }
+
+    setIsSummarizing(true);
+    try {
+      const emailIds = Array.from(selectedEmailIds);
+      const results = await Promise.allSettled(
+        emailIds.map(async (emailId) => {
+          try {
+            const response = await retryWithBackoff(() =>
+              fetch(`http://localhost:8080/emails/${emailId}/summary`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                credentials: 'include',
+              })
+            );
+
+            if (response.ok) {
+              return { emailId, success: true, message: 'Summary generated' };
+            } else {
+              const errorData = await response.json();
+              return { 
+                emailId, 
+                success: false, 
+                message: errorData.error || 'Failed to generate summary' 
+              };
+            }
+          } catch (error) {
+            return { 
+              emailId, 
+              success: false, 
+              message: error instanceof Error ? error.message : 'Network error' 
+            };
+          }
+        })
+      );
+
+      // Process results
+      let successCount = 0;
+      let failureCount = 0;
+      const failureMessages: string[] = [];
+
+      results.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          if (result.value.success) {
+            successCount++;
+          } else {
+            failureCount++;
+            failureMessages.push(`Email ${result.value.emailId}: ${result.value.message}`);
+          }
+        } else {
+          failureCount++;
+          failureMessages.push(`Email ${emailIds[index]}: ${result.reason}`);
+        }
+      });
+
+      // Show results
+      let message = `Summarization completed: ${successCount} successful, ${failureCount} failed`;
+      if (failureCount > 0 && failureMessages.length > 0) {
+        message += '\n\nFailures:\n' + failureMessages.slice(0, 5).join('\n');
+        if (failureMessages.length > 5) {
+          message += `\n... and ${failureMessages.length - 5} more`;
+        }
+      }
+      alert(message);
+
+      // Clear selection and refresh
+      setSelectedEmailIds(new Set());
+      if (selectedCategory) {
+        handleCategorySelect(selectedCategory);
+      } else {
+        fetchAccountEmails(selectedAccount!.id, currentPage);
+      }
+    } catch (error) {
+      console.error('Failed to bulk summarize:', error);
+      alert('Failed to summarize: Network error');
+    } finally {
+      setIsSummarizing(false);
+    }
+  };
+
+  const handleBulkCategorize = async () => {
+    if (selectedEmailIds.size === 0) {
+      alert('Please select emails to categorize');
+      return;
+    }
+
+    if (!confirm(`Are you sure you want to AI-categorize ${selectedEmailIds.size} emails?`)) {
+      return;
+    }
+
+    setIsCategorizing(true);
+    try {
+      const emailIds = Array.from(selectedEmailIds);
+      const results = await Promise.allSettled(
+        emailIds.map(async (emailId) => {
+          try {
+            const response = await retryWithBackoff(() =>
+              fetch(`http://localhost:8080/emails/${emailId}/categorize`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                credentials: 'include',
+              })
+            );
+
+            if (response.ok) {
+              const data = await response.json();
+              return { 
+                emailId, 
+                success: true, 
+                message: `Categorized as: ${data.categories?.join(', ') || 'Unknown'}` 
+              };
+            } else {
+              const errorData = await response.json();
+              return { 
+                emailId, 
+                success: false, 
+                message: errorData.error || 'Failed to categorize' 
+              };
+            }
+          } catch (error) {
+            return { 
+              emailId, 
+              success: false, 
+              message: error instanceof Error ? error.message : 'Network error' 
+            };
+          }
+        })
+      );
+
+      // Process results
+      let successCount = 0;
+      let failureCount = 0;
+      const failureMessages: string[] = [];
+
+      results.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          if (result.value.success) {
+            successCount++;
+          } else {
+            failureCount++;
+            failureMessages.push(`Email ${result.value.emailId}: ${result.value.message}`);
+          }
+        } else {
+          failureCount++;
+          failureMessages.push(`Email ${emailIds[index]}: ${result.reason}`);
+        }
+      });
+
+      // Show results
+      let message = `Categorization completed: ${successCount} successful, ${failureCount} failed`;
+      if (failureCount > 0 && failureMessages.length > 0) {
+        message += '\n\nFailures:\n' + failureMessages.slice(0, 5).join('\n');
+        if (failureMessages.length > 5) {
+          message += `\n... and ${failureMessages.length - 5} more`;
+        }
+      }
+      alert(message);
+
+      // Clear selection and refresh
+      setSelectedEmailIds(new Set());
+      if (selectedCategory) {
+        handleCategorySelect(selectedCategory);
+      } else {
+        fetchAccountEmails(selectedAccount!.id, currentPage);
+      }
+    } catch (error) {
+      console.error('Failed to bulk categorize:', error);
+      alert('Failed to categorize: Network error');
+    } finally {
+      setIsCategorizing(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
@@ -942,6 +1161,34 @@ export default function DashboardPage() {
                           <span className="text-sm text-blue-700 font-medium">
                             {selectedEmailIds.size} selected
                           </span>
+                          <button
+                            onClick={handleBulkSummarize}
+                            disabled={isSummarizing}
+                            className="px-3 py-1 text-sm bg-black text-white rounded-md hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          >
+                            {isSummarizing ? (
+                              <div className="flex items-center">
+                                <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin mr-1"></div>
+                                Summarizing...
+                              </div>
+                            ) : (
+                              'AI Summary'
+                            )}
+                          </button>
+                          <button
+                            onClick={handleBulkCategorize}
+                            disabled={isCategorizing}
+                            className="px-3 py-1 text-sm bg-gray-700 text-white rounded-md hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          >
+                            {isCategorizing ? (
+                              <div className="flex items-center">
+                                <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin mr-1"></div>
+                                Categorizing...
+                              </div>
+                            ) : (
+                              'AI Categorize'
+                            )}
+                          </button>
                           <button
                             onClick={handleBulkUnsubscribe}
                             disabled={isUnsubscribing}
