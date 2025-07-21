@@ -211,7 +211,7 @@ export default function DashboardPage() {
     return categoryIds.map(id => {
       const category = categories.find(c => c.id === id);
       return category ? category.name : '';
-    }).filter(name => name !== '');
+    }).filter(name => name !== '' && name !== 'YELLOW_STAR');
   };
 
   const getNonSystemCategoryNames = (categoryIds: number[]): string[] => {
@@ -219,7 +219,7 @@ export default function DashboardPage() {
     return categoryIds.map(id => {
       const category = categories.find(c => c.id === id);
       return category ? category.name : '';
-    }).filter(name => name !== '' && !isSystemLabel(name));
+    }).filter(name => name !== '' && !isSystemLabel(name) && name !== 'YELLOW_STAR');
   };
 
   const isSystemLabel = (categoryName: string): boolean => {
@@ -229,7 +229,7 @@ export default function DashboardPage() {
       // Gmail system label IDs
       'INBOX', 'SENT', 'DRAFT', 'SPAM', 'TRASH', 'IMPORTANT', 'STARRED', 'UNREAD', 'CHAT',
       // Star labels
-      'YELLOW_STAR', 'BLUE_STAR', 'RED_STAR', 'ORANGE_STAR', 'GREEN_STAR', 'PURPLE_STAR',
+      'BLUE_STAR', 'RED_STAR', 'ORANGE_STAR', 'GREEN_STAR', 'PURPLE_STAR',
       // Category labels
       'CATEGORY_PERSONAL', 'CATEGORY_SOCIAL', 'CATEGORY_PROMOTIONS', 'CATEGORY_UPDATES', 'CATEGORY_FORUMS'
     ];
@@ -237,11 +237,11 @@ export default function DashboardPage() {
   };
 
   const getSystemCategories = (): Category[] => {
-    return categories.filter(cat => isSystemLabel(cat.name));
+    return categories.filter(cat => isSystemLabel(cat.name) && cat.name !== 'YELLOW_STAR');
   };
 
   const getCustomCategories = (): Category[] => {
-    return categories.filter(cat => !isSystemLabel(cat.name));
+    return categories.filter(cat => !isSystemLabel(cat.name) && cat.name !== 'YELLOW_STAR');
   };
 
   const sanitizeAndRenderEmailBody = (body: string): string => {
@@ -1335,7 +1335,7 @@ export default function DashboardPage() {
                         <div className="space-y-4">
                           {/* Subject line with proper overflow handling */}
                           <div className="pr-4">
-                            <h1 className="text-2xl font-bold text-black leading-tight break-words">{selectedEmail.subject || '(No Subject)'}</h1>
+                            <h1 className="text-2xl font-bold text-black leading-tight break-words line-clamp-2">{selectedEmail.subject || '(No Subject)'}</h1>
                           </div>
                           
                           {/* Categories */}
@@ -1462,7 +1462,7 @@ export default function DashboardPage() {
                           >
                             <div className="flex items-center gap-3">
                               <div className="flex items-center gap-2">
-                                <h3 className="font-semibold text-black text-base truncate group-hover:text-gray-900">
+                                <h3 className="font-semibold text-black text-base truncate group-hover:text-gray-900" title={email.subject || '(No Subject)'}>
                                   {email.subject || '(No Subject)'}
                                 </h3>
                                 {email.unsubscribe_link && (
