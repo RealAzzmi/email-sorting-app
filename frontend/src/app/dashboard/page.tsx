@@ -124,6 +124,7 @@ export default function DashboardPage() {
   const [showAISummary, setShowAISummary] = useState(false);
   const [emailsShowingAISummary, setEmailsShowingAISummary] = useState<Set<number>>(new Set());
   const [selectedEmailIds, setSelectedEmailIds] = useState<Set<number>>(new Set());
+  const [showUncategorizedOnly, setShowUncategorizedOnly] = useState(false);
   const [isUnsubscribing, setIsUnsubscribing] = useState(false);
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [isCategorizing, setIsCategorizing] = useState(false);
@@ -1181,8 +1182,28 @@ export default function DashboardPage() {
                       </h2>
                       {totalCount > 0 && (
                         <p className="text-sm text-gray-600">
-                          {totalCount} {totalCount === 1 ? 'email' : 'emails'}
+                          {showUncategorizedOnly 
+                            ? (() => {
+                                const filteredCount = emails.filter(email => getNonSystemCategoryNames(email.category_ids).length === 0).length;
+                                return `${filteredCount} ${filteredCount === 1 ? 'email' : 'emails'} without custom categories`;
+                              })()
+                            : `${totalCount} ${totalCount === 1 ? 'email' : 'emails'}`
+                          }
                         </p>
+                      )}
+                      {!selectedCategory && getCustomCategories().length > 0 && (
+                        <div className="flex items-center mt-2">
+                          <input
+                            type="checkbox"
+                            id="uncategorized-filter"
+                            checked={showUncategorizedOnly}
+                            onChange={(e) => setShowUncategorizedOnly(e.target.checked)}
+                            className="w-4 h-4 rounded border-2 border-gray-300 text-black bg-white checked:bg-black checked:border-black focus:ring-2 focus:ring-gray-300 focus:ring-offset-0 transition-all duration-200 ease-in-out hover:border-gray-400 checked:hover:bg-gray-800"
+                          />
+                          <label htmlFor="uncategorized-filter" className="ml-2 text-sm text-gray-600">
+                            Show only emails without custom categories
+                          </label>
+                        </div>
                       )}
                     </div>
                     <div className="flex gap-2">
@@ -1415,7 +1436,10 @@ export default function DashboardPage() {
                         </div>
                       </div>
                     )}
-                    {emails.map((email) => (
+                    {(showUncategorizedOnly 
+                      ? emails.filter(email => getNonSystemCategoryNames(email.category_ids).length === 0)
+                      : emails
+                    ).map((email) => (
                       <div
                         key={email.id}
                         className="group px-6 py-4 hover:bg-gray-50 transition-all duration-200 ease-in-out"

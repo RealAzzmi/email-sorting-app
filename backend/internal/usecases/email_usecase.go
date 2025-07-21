@@ -233,6 +233,12 @@ func (u *EmailUsecase) initialSyncAccountEmails(ctx context.Context, account *en
 		if err != nil {
 			return fmt.Errorf("failed to bulk create emails: %w", err)
 		}
+
+		// Apply AI categorization to newly created emails
+		err = u.applyAICategorization(ctx, account.ID, emailsToCreate)
+		if err != nil {
+			fmt.Printf("Warning: failed to apply AI categorization to new emails: %v\n", err)
+		}
 	}
 
 	// Get and store the current history ID
@@ -335,6 +341,12 @@ func (u *EmailUsecase) incrementalSyncAccountEmails(ctx context.Context, account
 		err = u.emailRepo.BulkCreate(ctx, emailsToCreate)
 		if err != nil {
 			return fmt.Errorf("failed to bulk create new emails: %w", err)
+		}
+
+		// Apply AI categorization to newly created emails
+		err = u.applyAICategorization(ctx, account.ID, emailsToCreate)
+		if err != nil {
+			fmt.Printf("Warning: failed to apply AI categorization to new emails: %v\n", err)
 		}
 	}
 
@@ -648,4 +660,62 @@ func (u *EmailUsecase) BulkUnsubscribe(ctx context.Context, emailIDs []int64) (m
 	}
 
 	return results, nil
+}
+
+// applyAICategorization applies AI categorization to newly created emails
+func (u *EmailUsecase) applyAICategorization(ctx context.Context, accountID int64, emails []entities.Email) error {
+	// Get account's custom categories for AI categorization
+	categories, err := u.categoryRepo.GetByAccountID(ctx, accountID)
+	if err != nil {
+		return fmt.Errorf("failed to get categories: %w", err)
+	}
+
+	// Filter to only custom categories (exclude system ones)
+	var customCategories []entities.Category
+	for _, cat := range categories {
+		if !u.isSystemCategoryName(cat.Name) {
+			customCategories = append(customCategories, cat)
+		}
+	}
+
+	// Skip if no custom categories available
+	if len(customCategories) == 0 {
+		return nil
+	}
+
+	// Apply AI categorization to each email
+	for _, email := range emails {
+		// Use AI to categorize email
+		aiCategoryIDs, err := u.aiService.CategorizeEmail(ctx, &email, customCategories)
+		if err != nil {
+			fmt.Printf("Warning: failed to AI categorize email %s: %v\n", email.GmailMessageID, err)
+			continue
+		}
+
+		if len(aiCategoryIDs) == 0 {
+			continue
+		}
+
+		// Merge AI categories with existing categories (from Gmail labels)
+		categoryIDSet := make(map[int64]bool)
+		for _, id := range email.CategoryIDs {
+			categoryIDSet[id] = true
+		}
+		for _, id := range aiCategoryIDs {
+			categoryIDSet[id] = true
+		}
+
+		var mergedCategoryIDs []int64
+		for id := range categoryIDSet {
+			mergedCategoryIDs = append(mergedCategoryIDs, id)
+		}
+
+		// Update email categories
+		err = u.emailRepo.UpdateCategoriesByGmailMessageID(ctx, email.AccountID, email.GmailMessageID, mergedCategoryIDs)
+		if err != nil {
+			fmt.Printf("Warning: failed to update categories for email %s: %v\n", email.GmailMessageID, err)
+		}
+	}
+
+	return nil
 }
