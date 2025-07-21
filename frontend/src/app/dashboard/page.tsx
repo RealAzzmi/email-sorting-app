@@ -122,6 +122,7 @@ export default function DashboardPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [showAISummary, setShowAISummary] = useState(false);
+  const [emailsShowingAISummary, setEmailsShowingAISummary] = useState<Set<number>>(new Set());
   const [selectedEmailIds, setSelectedEmailIds] = useState<Set<number>>(new Set());
   const [isUnsubscribing, setIsUnsubscribing] = useState(false);
   const [isSummarizing, setIsSummarizing] = useState(false);
@@ -198,6 +199,7 @@ export default function DashboardPage() {
     setSelectedEmail(null);
     setSelectedCategory(null);
     setSelectedEmailIds(new Set());
+    setEmailsShowingAISummary(new Set());
     setCurrentPage(1);
     fetchAccountEmails(account.id, 1);
     fetchAccountCategories(account.id);
@@ -209,6 +211,14 @@ export default function DashboardPage() {
       const category = categories.find(c => c.id === id);
       return category ? category.name : '';
     }).filter(name => name !== '');
+  };
+
+  const getNonSystemCategoryNames = (categoryIds: number[]): string[] => {
+    if (!categoryIds || categoryIds.length === 0) return [];
+    return categoryIds.map(id => {
+      const category = categories.find(c => c.id === id);
+      return category ? category.name : '';
+    }).filter(name => name !== '' && !isSystemLabel(name));
   };
 
   const isSystemLabel = (categoryName: string): boolean => {
@@ -359,6 +369,7 @@ export default function DashboardPage() {
     
     setSelectedCategory(null);
     setSelectedEmailIds(new Set());
+    setEmailsShowingAISummary(new Set());
     setCurrentPage(1);
     fetchAccountEmails(selectedAccount.id, 1);
   };
@@ -584,6 +595,25 @@ export default function DashboardPage() {
       newSelected.add(emailId);
     }
     setSelectedEmailIds(newSelected);
+  };
+
+  const handleToggleEmailAISummary = (emailId: number, email: Email) => {
+    const newShowingSummary = new Set(emailsShowingAISummary);
+    
+    if (email.ai_summary) {
+      // If email has a summary, toggle its display
+      if (newShowingSummary.has(emailId)) {
+        newShowingSummary.delete(emailId);
+      } else {
+        newShowingSummary.add(emailId);
+      }
+      setEmailsShowingAISummary(newShowingSummary);
+    } else {
+      // If email doesn't have a summary, generate one and show it
+      handleGenerateAISummary(emailId);
+      newShowingSummary.add(emailId);
+      setEmailsShowingAISummary(newShowingSummary);
+    }
   };
 
   const handleSelectAll = () => {
@@ -949,7 +979,7 @@ export default function DashboardPage() {
           scrollbar-gutter: stable;
         }
       `}</style>
-      <div className="min-h-screen bg-white">
+      <div className="min-h-screen bg-gray-50">
         {/* Header */}
       <header className="bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -1250,10 +1280,10 @@ export default function DashboardPage() {
                   </div>
                 ) : selectedEmail ? (
                   <div className="p-6">
-                    <div className="flex justify-between items-center mb-6">
+                    <div className="flex justify-between items-start mb-6 gap-4">
                       <button
                         onClick={() => setSelectedEmail(null)}
-                        className="inline-flex items-center gap-2 px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 hover:text-gray-900 rounded-lg transition-colors font-medium"
+                        className="inline-flex items-center gap-2 px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 hover:text-gray-900 rounded-lg transition-colors font-medium flex-shrink-0"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -1261,17 +1291,17 @@ export default function DashboardPage() {
                         Back
                       </button>
                       
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 flex-shrink-0">
                         <button
                           onClick={() => handleCategorizeWithAI(selectedEmail.id)}
-                          className="px-3 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium"
+                          className="px-3 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium whitespace-nowrap"
                         >
                           🤖 Categorize with AI
                         </button>
                         {!selectedEmail.ai_summary && (
                           <button
                             onClick={() => handleGenerateAISummary(selectedEmail.id)}
-                            className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                            className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium whitespace-nowrap"
                           >
                             ✨ Generate Summary
                           </button>
@@ -1279,52 +1309,69 @@ export default function DashboardPage() {
                       </div>
                     </div>
                     <div className="space-y-6">
-                      <div className="space-y-3">
-                        <div className="flex items-start gap-3">
-                          <h1 className="text-2xl font-bold text-black leading-tight">{selectedEmail.subject || '(No Subject)'}</h1>
-                          {selectedEmail.category_ids && selectedEmail.category_ids.length > 0 && (
+                      {/* Email Header with clear visual separation */}
+                      <div className="bg-gray-50 -mx-6 -mt-6 px-6 pt-6 pb-4 border-b border-gray-200">
+                        <div className="space-y-4">
+                          {/* Subject line with proper overflow handling */}
+                          <div className="pr-4">
+                            <h1 className="text-2xl font-bold text-black leading-tight break-words">{selectedEmail.subject || '(No Subject)'}</h1>
+                          </div>
+                          
+                          {/* Categories */}
+                          {selectedEmail.category_ids && selectedEmail.category_ids.length > 0 && getNonSystemCategoryNames(selectedEmail.category_ids).length > 0 && (
                             <div className="flex flex-wrap gap-1">
-                              {getCategoryNames(selectedEmail.category_ids).map((categoryName, index) => (
+                              {getNonSystemCategoryNames(selectedEmail.category_ids).map((categoryName, index) => (
                                 <span key={index} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
                                   {categoryName}
                                 </span>
                               ))}
                             </div>
                           )}
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-base text-gray-700 font-medium">{selectedEmail.sender}</p>
-                          <p className="text-sm text-gray-500">
-                            {new Date(selectedEmail.received_at).toLocaleString('en-US', {
-                              weekday: 'long',
-                              year: 'numeric',
-                              month: 'long',
-                              day: 'numeric',
-                              hour: 'numeric',
-                              minute: '2-digit',
-                              hour12: true
-                            })}
-                          </p>
+                          
+                          {/* Sender and date section with clear visual separation */}
+                          <div className="flex items-center justify-between pt-2 border-t border-gray-300">
+                            <div>
+                              <p className="text-base text-gray-900 font-semibold">{selectedEmail.sender}</p>
+                              <p className="text-sm text-gray-600">
+                                {new Date(selectedEmail.received_at).toLocaleString('en-US', {
+                                  weekday: 'long',
+                                  year: 'numeric',
+                                  month: 'long',
+                                  day: 'numeric',
+                                  hour: 'numeric',
+                                  minute: '2-digit',
+                                  hour12: true
+                                })}
+                              </p>
+                            </div>
+                          </div>
                         </div>
                       </div>
-                      <div className="mt-8">
-                        <div className="bg-white p-6 rounded-lg">
+                      
+                      {/* Email Content with clear separation */}
+                      <div className="mt-6">
+                        <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
                           {showAISummary ? (
                             selectedEmail.ai_summary ? (
-                              <div className="text-sm text-gray-800 leading-relaxed">
-                                <div className="bg-blue-50 border-l-4 border-blue-400 p-4 mb-4">
-                                  <div className="flex">
-                                    <div className="flex-shrink-0">
-                                      <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
-                                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                              <div className="bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 rounded-xl p-6 border border-blue-100 shadow-sm">
+                                <div className="flex items-start gap-4 mb-4">
+                                  <div className="flex-shrink-0">
+                                    <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
+                                      <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                                       </svg>
                                     </div>
-                                    <div className="ml-3">
-                                      <p className="text-sm text-blue-800 font-medium">AI Summary</p>
-                                    </div>
+                                  </div>
+                                  <div className="flex-1">
+                                    <h3 className="text-sm font-semibold text-gray-900 mb-1">AI Summary</h3>
+                                    <p className="text-xs text-gray-600">Generated by artificial intelligence</p>
                                   </div>
                                 </div>
-                                <p className="text-gray-800">{selectedEmail.ai_summary}</p>
+                                <div className="bg-white/70 rounded-lg p-4 backdrop-blur-sm">
+                                  <p className="text-sm text-gray-800 leading-relaxed font-medium">
+                                    {selectedEmail.ai_summary}
+                                  </p>
+                                </div>
                               </div>
                             ) : (
                               <div className="text-center py-8">
@@ -1358,16 +1405,13 @@ export default function DashboardPage() {
                     {/* Select All Header */}
                     {emails.length > 0 && (
                       <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center">
                           <input
                             type="checkbox"
                             checked={selectedEmailIds.size === emails.length && emails.length > 0}
                             onChange={handleSelectAll}
-                            className="w-4 h-4 text-black border-gray-300 rounded focus:ring-black focus:ring-2"
+                            className="w-5 h-5 rounded-full border-2 border-gray-300 text-black bg-white checked:bg-black checked:border-black focus:ring-2 focus:ring-gray-300 focus:ring-offset-0 transition-all duration-200 ease-in-out hover:border-gray-400 checked:hover:bg-gray-800"
                           />
-                          <span className="text-sm font-medium text-gray-700">
-                            Select All ({emails.length})
-                          </span>
                         </div>
                       </div>
                     )}
@@ -1376,16 +1420,18 @@ export default function DashboardPage() {
                         key={email.id}
                         className="group px-6 py-4 hover:bg-gray-50 transition-all duration-200 ease-in-out"
                       >
-                        <div className="flex items-start gap-4">
-                          <input
-                            type="checkbox"
-                            checked={selectedEmailIds.has(email.id)}
-                            onChange={(e) => {
-                              e.stopPropagation();
-                              handleSelectEmail(email.id);
-                            }}
-                            className="w-4 h-4 text-black border-gray-300 rounded focus:ring-black focus:ring-2 mt-1"
-                          />
+                        <div className="flex items-center gap-4">
+                          <div className="flex items-center justify-center">
+                            <input
+                              type="checkbox"
+                              checked={selectedEmailIds.has(email.id)}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                handleSelectEmail(email.id);
+                              }}
+                              className="w-5 h-5 rounded-full border-2 border-gray-300 text-black bg-white checked:bg-black checked:border-black focus:ring-2 focus:ring-gray-300 focus:ring-offset-0 transition-all duration-200 ease-in-out hover:border-gray-400 checked:hover:bg-gray-800"
+                            />
+                          </div>
                           <div 
                             className="flex-1 min-w-0 space-y-1 cursor-pointer"
                             onClick={() => setSelectedEmail(email)}
@@ -1404,39 +1450,59 @@ export default function DashboardPage() {
                                   </span>
                                 )}
                               </div>
-                              {email.category_ids && email.category_ids.length > 0 && (
+                              {email.category_ids && email.category_ids.length > 0 && getNonSystemCategoryNames(email.category_ids).length > 0 && (
                                 <div className="flex flex-wrap gap-1">
-                                  {getCategoryNames(email.category_ids).slice(0, 2).map((categoryName, index) => (
+                                  {getNonSystemCategoryNames(email.category_ids).slice(0, 2).map((categoryName, index) => (
                                     <span key={index} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700 border-0">
                                       {categoryName}
                                     </span>
                                   ))}
-                                  {email.category_ids.length > 2 && (
+                                  {getNonSystemCategoryNames(email.category_ids).length > 2 && (
                                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-600 border-0">
-                                      +{email.category_ids.length - 2}
+                                      +{getNonSystemCategoryNames(email.category_ids).length - 2}
                                     </span>
                                   )}
                                 </div>
                               )}
                             </div>
-                            <p className="text-sm text-gray-600 truncate font-medium">
-                              {email.sender}
-                            </p>
-                            {showAISummary && email.ai_summary && (
-                              <p className="text-xs text-blue-600 font-normal italic truncate">
-                                AI: {email.ai_summary}
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm text-gray-600 truncate font-medium">
+                                {email.sender}
                               </p>
+                              <p className="text-xs text-gray-500 font-normal">
+                                {new Date(email.received_at).toLocaleString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: new Date(email.received_at).getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined,
+                                  hour: 'numeric',
+                                  minute: '2-digit',
+                                  hour12: true
+                                })}
+                              </p>
+                            </div>
+                            {(showAISummary || emailsShowingAISummary.has(email.id)) ? (
+                              email.ai_summary && (
+                                <div className="mt-2 p-2 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border-l-3 border-blue-400">
+                                  <div className="flex items-start gap-2">
+                                    <div className="flex-shrink-0 mt-0.5">
+                                      <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
+                                    </div>
+                                    <p className="text-xs text-blue-800 font-medium leading-relaxed">
+                                      {email.ai_summary}
+                                    </p>
+                                  </div>
+                                </div>
+                              )
+                            ) : (
+                              email.body && (
+                                <div 
+                                  className="text-xs text-gray-700 font-normal truncate"
+                                  dangerouslySetInnerHTML={{ 
+                                    __html: sanitizeAndRenderEmailBody(email.body).substring(0, 200) + '...'
+                                  }}
+                                />
+                              )
                             )}
-                            <p className="text-xs text-gray-500 font-normal">
-                              {new Date(email.received_at).toLocaleString('en-US', {
-                                month: 'short',
-                                day: 'numeric',
-                                year: new Date(email.received_at).getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined,
-                                hour: 'numeric',
-                                minute: '2-digit',
-                                hour12: true
-                              })}
-                            </p>
                           </div>
                           <div className="flex-shrink-0 flex items-center gap-2">
                             <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex gap-1">
@@ -1450,18 +1516,33 @@ export default function DashboardPage() {
                               >
                                 🤖
                               </button>
-                              {!email.ai_summary && (
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleGenerateAISummary(email.id);
-                                  }}
-                                  className="p-1 text-xs bg-blue-100 text-blue-600 rounded hover:bg-blue-200 transition-colors"
-                                  title="Generate AI Summary"
-                                >
-                                  ✨
-                                </button>
-                              )}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleToggleEmailAISummary(email.id, email);
+                                }}
+                                className={`p-1 text-xs rounded transition-colors ${
+                                  email.ai_summary 
+                                    ? (emailsShowingAISummary.has(email.id) && !showAISummary)
+                                      ? 'bg-blue-100 text-blue-600 hover:bg-blue-200'
+                                      : 'bg-green-100 text-green-600 hover:bg-green-200'
+                                    : 'bg-blue-100 text-blue-600 hover:bg-blue-200'
+                                }`}
+                                title={
+                                  email.ai_summary 
+                                    ? (emailsShowingAISummary.has(email.id) && !showAISummary)
+                                      ? "Hide AI Summary"
+                                      : "Show AI Summary"
+                                    : "Generate AI Summary"
+                                }
+                              >
+                                {email.ai_summary 
+                                  ? (emailsShowingAISummary.has(email.id) && !showAISummary)
+                                    ? '🔽'
+                                    : '✅'
+                                  : '✨'
+                                }
+                              </button>
                               {email.unsubscribe_link && (
                                 <button
                                   onClick={(e) => {
