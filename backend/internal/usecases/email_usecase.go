@@ -9,11 +9,11 @@ import (
 )
 
 type EmailUsecase struct {
-	emailRepo         repositories.EmailRepository
-	accountRepo       repositories.AccountRepository
-	categoryRepo      repositories.CategoryRepository
-	gmailService      repositories.GmailService
-	aiService         repositories.AIService
+	emailRepo          repositories.EmailRepository
+	accountRepo        repositories.AccountRepository
+	categoryRepo       repositories.CategoryRepository
+	gmailService       repositories.GmailService
+	aiService          repositories.AIService
 	unsubscribeService repositories.UnsubscribeService
 }
 
@@ -26,11 +26,11 @@ func NewEmailUsecase(
 	unsubscribeService repositories.UnsubscribeService,
 ) *EmailUsecase {
 	return &EmailUsecase{
-		emailRepo:         emailRepo,
-		accountRepo:       accountRepo,
-		categoryRepo:      categoryRepo,
-		gmailService:      gmailService,
-		aiService:         aiService,
+		emailRepo:          emailRepo,
+		accountRepo:        accountRepo,
+		categoryRepo:       categoryRepo,
+		gmailService:       gmailService,
+		aiService:          aiService,
 		unsubscribeService: unsubscribeService,
 	}
 }
@@ -201,14 +201,14 @@ func (u *EmailUsecase) initialSyncAccountEmails(ctx context.Context, account *en
 
 		// Debug logging for labels
 		fmt.Printf("Processing message %s with label IDs: %v, label names: %v\n", gmailMsg.ID, gmailMsg.Labels, labelNamesForMsg)
-		
+
 		// Determine categories from Gmail label names (not IDs)
 		categoryIDs, err := u.getCategoriesFromLabels(ctx, account.ID, labelNamesForMsg)
 		if err != nil {
 			// Log error but continue processing
 			fmt.Printf("Warning: failed to get categories for message %s: %v\n", gmailMsg.ID, err)
 		}
-		
+
 		if len(categoryIDs) > 0 {
 			fmt.Printf("Message %s assigned to category IDs: %v\n", gmailMsg.ID, categoryIDs)
 		} else {
@@ -370,7 +370,7 @@ func (u *EmailUsecase) GetEmailsByCategory(ctx context.Context, accountID, categ
 // getCategoriesFromLabels maps Gmail labels to app categories
 func (u *EmailUsecase) getCategoriesFromLabels(ctx context.Context, accountID int64, labels []string) ([]int64, error) {
 	fmt.Printf("getCategoriesFromLabels called with labels: %v\n", labels)
-	
+
 	// Skip if no labels
 	if len(labels) == 0 {
 		fmt.Printf("No labels found, returning empty slice\n")
@@ -379,14 +379,14 @@ func (u *EmailUsecase) getCategoriesFromLabels(ctx context.Context, accountID in
 
 	var categoryIDs []int64
 	categoryNames := make(map[string]bool)
-	
+
 	// First collect all custom labels (non-system)
 	for _, label := range labels {
 		if !u.isSystemLabel(label) {
 			categoryNames[label] = true
 		}
 	}
-	
+
 	// Also include meaningful system labels as categories
 	for _, label := range labels {
 		var categoryName string
@@ -430,19 +430,19 @@ func (u *EmailUsecase) getCategoriesFromLabels(ctx context.Context, accountID in
 // isSystemLabel checks if a label is a Gmail system label or auto-category
 func (u *EmailUsecase) isSystemLabel(label string) bool {
 	systemLabels := []string{
-		"INBOX", "SENT", "DRAFT", "SPAM", "TRASH", 
+		"INBOX", "SENT", "DRAFT", "SPAM", "TRASH",
 		"UNREAD", "STARRED", "IMPORTANT", "CHAT",
 		// Gmail auto-categories (exclude these as they're not user-created labels)
-		"CATEGORY_PERSONAL", "CATEGORY_SOCIAL", "CATEGORY_PROMOTIONS", 
+		"CATEGORY_PERSONAL", "CATEGORY_SOCIAL", "CATEGORY_PROMOTIONS",
 		"CATEGORY_UPDATES", "CATEGORY_FORUMS",
 	}
-	
+
 	for _, sysLabel := range systemLabels {
 		if label == sysLabel {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
@@ -581,7 +581,7 @@ func (u *EmailUsecase) CategorizeEmailWithAI(ctx context.Context, emailID int64)
 	for _, id := range aiCategoryIDs {
 		categoryIDSet[id] = true
 	}
-	
+
 	var mergedCategoryIDs []int64
 	for id := range categoryIDSet {
 		mergedCategoryIDs = append(mergedCategoryIDs, id)
@@ -591,18 +591,17 @@ func (u *EmailUsecase) CategorizeEmailWithAI(ctx context.Context, emailID int64)
 	return u.emailRepo.UpdateCategoriesByGmailMessageID(ctx, email.AccountID, email.GmailMessageID, mergedCategoryIDs)
 }
 
-
 func (u *EmailUsecase) isSystemCategoryName(name string) bool {
 	systemCategories := []string{
 		"Inbox", "Sent", "Drafts", "Spam", "Trash", "Starred", "Important",
 	}
-	
+
 	for _, sysCategory := range systemCategories {
 		if name == sysCategory {
 			return true
 		}
 	}
-	
+
 	return false
 }
 

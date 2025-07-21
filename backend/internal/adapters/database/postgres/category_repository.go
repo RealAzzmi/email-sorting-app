@@ -81,7 +81,7 @@ func (r *CategoryRepository) GetOrCreate(ctx context.Context, accountID int64, n
 	if err != nil {
 		return nil, err
 	}
-	
+
 	if category != nil {
 		return category, nil
 	}

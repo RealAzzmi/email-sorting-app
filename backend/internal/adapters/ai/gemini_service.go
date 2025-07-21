@@ -34,7 +34,7 @@ func (g *GeminiService) Close() {
 
 func (g *GeminiService) SummarizeEmail(ctx context.Context, email *entities.Email) (string, error) {
 	model := g.client.GenerativeModel("gemini-2.0-flash-exp")
-	
+
 	prompt := fmt.Sprintf(`Summarize this email in 1-2 sentences. Be concise and focus on the key action items or main points.
 
 Subject: %s
@@ -62,7 +62,7 @@ func (g *GeminiService) CategorizeEmail(ctx context.Context, email *entities.Ema
 	}
 
 	model := g.client.GenerativeModel("gemini-2.0-flash-exp")
-	
+
 	// Build categories string
 	var categoriesStr strings.Builder
 	for _, cat := range categories {
@@ -101,7 +101,7 @@ Categories:`, email.Subject, email.Sender, email.Body, categoriesStr.String())
 	}
 
 	result := strings.TrimSpace(fmt.Sprintf("%v", resp.Candidates[0].Content.Parts[0]))
-	
+
 	if result == "NONE" || result == "" {
 		return []int64{}, nil
 	}
@@ -109,7 +109,7 @@ Categories:`, email.Subject, email.Sender, email.Body, categoriesStr.String())
 	// Parse the response and match category names to IDs
 	categoryNames := strings.Split(result, ",")
 	var categoryIDs []int64
-	
+
 	for _, name := range categoryNames {
 		name = strings.TrimSpace(name)
 		for _, cat := range categories {
@@ -125,7 +125,7 @@ Categories:`, email.Subject, email.Sender, email.Body, categoriesStr.String())
 
 func (g *GeminiService) AnalyzeUnsubscribePage(ctx context.Context, pageContent, pageURL string) (*repositories.UnsubscribePageAnalysis, error) {
 	model := g.client.GenerativeModel("gemini-2.0-flash-exp")
-	
+
 	prompt := fmt.Sprintf(`Analyze this webpage to determine if it's an unsubscribe page and how to interact with it.
 
 URL: %s
@@ -175,23 +175,23 @@ JSON:`, pageURL, pageContent)
 	}
 
 	responseText := fmt.Sprintf("%v", resp.Candidates[0].Content.Parts[0])
-	
+
 	// Try to parse JSON response
 	var analysis repositories.UnsubscribePageAnalysis
-	
+
 	// Clean up the response to extract just the JSON
 	jsonStart := strings.Index(responseText, "{")
 	jsonEnd := strings.LastIndex(responseText, "}")
-	
+
 	if jsonStart == -1 || jsonEnd == -1 {
 		return &repositories.UnsubscribePageAnalysis{
 			IsUnsubscribePage: false,
 			Reasoning:         "Failed to parse AI response as JSON",
 		}, nil
 	}
-	
+
 	jsonContent := responseText[jsonStart : jsonEnd+1]
-	
+
 	err = json.Unmarshal([]byte(jsonContent), &analysis)
 	if err != nil {
 		return &repositories.UnsubscribePageAnalysis{
@@ -199,14 +199,14 @@ JSON:`, pageURL, pageContent)
 			Reasoning:         fmt.Sprintf("Failed to parse AI response: %v", err),
 		}, nil
 	}
-	
+
 	return &analysis, nil
 }
 
 func (g *GeminiService) ExtractUnsubscribeLink(ctx context.Context, headers, body string) (string, error) {
 	model := g.client.GenerativeModel("gemini-2.0-flash-exp")
 
-	prompt := fmt.Sprintf(`Find the unsubscribe link in this email (sometimes they use the word "If you no longer wish to receive these emails" or similar). Return only the URL, nothing else.
+	prompt := fmt.Sprintf(`Find the unsubscribe link in this email. Return only the URL, nothing else.
 
 Email Headers:
 %s
@@ -227,13 +227,12 @@ URL:`, headers, body)
 		return "", fmt.Errorf("failed to extract unsubscribe link: %w", err)
 	}
 
-
 	if len(resp.Candidates) == 0 || len(resp.Candidates[0].Content.Parts) == 0 {
 		return "", fmt.Errorf("no content generated")
 	}
 
 	result := strings.TrimSpace(fmt.Sprintf("%v", resp.Candidates[0].Content.Parts[0]))
-	
+
 	if result == "NONE" || result == "" {
 		return "", nil
 	}

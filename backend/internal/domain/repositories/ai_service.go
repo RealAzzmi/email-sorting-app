@@ -7,20 +7,20 @@ import (
 )
 
 type UnsubscribeAction struct {
-	Action    string                 `json:"action"`     // "click", "fill", "select", "wait"
-	Selector  string                 `json:"selector"`   // CSS selector or element description
-	Value     string                 `json:"value"`      // Text to fill or option to select
-	Reasoning string                 `json:"reasoning"`  // Why this action is needed
-	MetaData  map[string]interface{} `json:"metadata"`   // Additional action-specific data
+	Action    string                 `json:"action"`    // "click", "fill", "select", "wait"
+	Selector  string                 `json:"selector"`  // CSS selector or element description
+	Value     string                 `json:"value"`     // Text to fill or option to select
+	Reasoning string                 `json:"reasoning"` // Why this action is needed
+	MetaData  map[string]interface{} `json:"metadata"`  // Additional action-specific data
 }
 
 type UnsubscribePageAnalysis struct {
-	IsUnsubscribePage bool                  `json:"is_unsubscribe_page"`
-	RequiresAuth      bool                  `json:"requires_auth"`
-	Actions           []UnsubscribeAction   `json:"actions"`
-	SuccessIndicators []string              `json:"success_indicators"`
-	ErrorIndicators   []string              `json:"error_indicators"`
-	Reasoning         string                `json:"reasoning"`
+	IsUnsubscribePage bool                `json:"is_unsubscribe_page"`
+	RequiresAuth      bool                `json:"requires_auth"`
+	Actions           []UnsubscribeAction `json:"actions"`
+	SuccessIndicators []string            `json:"success_indicators"`
+	ErrorIndicators   []string            `json:"error_indicators"`
+	Reasoning         string              `json:"reasoning"`
 }
 
 type AIService interface {

@@ -71,7 +71,7 @@ func (w *WebAutomationService) Close() error {
 	return nil
 }
 
-func (w *WebAutomationService) UnsubscribeFromEmail(ctx context.Context, email *entities.Email) (*repositories.UnsubscribeResult, error) {	
+func (w *WebAutomationService) UnsubscribeFromEmail(ctx context.Context, email *entities.Email) (*repositories.UnsubscribeResult, error) {
 	if email.UnsubscribeLink == nil || *email.UnsubscribeLink == "" {
 		return &repositories.UnsubscribeResult{
 			Success:   false,
@@ -81,7 +81,7 @@ func (w *WebAutomationService) UnsubscribeFromEmail(ctx context.Context, email *
 	}
 
 	link := *email.UnsubscribeLink
-	
+
 	// Validate the link before processing
 	if !w.isValidUnsubscribeLink(link) {
 		return &repositories.UnsubscribeResult{
@@ -106,11 +106,11 @@ func (w *WebAutomationService) UnsubscribeFromEmail(ctx context.Context, email *
 
 func (w *WebAutomationService) BulkUnsubscribe(ctx context.Context, emails []*entities.Email) (map[int64]*repositories.UnsubscribeResult, error) {
 	results := make(map[int64]*repositories.UnsubscribeResult)
-	
+
 	for _, email := range emails {
 		// Add delay between requests to be respectful
 		time.Sleep(2 * time.Second)
-		
+
 		result, err := w.UnsubscribeFromEmail(ctx, email)
 		if err != nil {
 			results[email.ID] = &repositories.UnsubscribeResult{
@@ -122,7 +122,7 @@ func (w *WebAutomationService) BulkUnsubscribe(ctx context.Context, emails []*en
 			results[email.ID] = result
 		}
 	}
-	
+
 	return results, nil
 }
 
@@ -135,12 +135,12 @@ func (w *WebAutomationService) isValidUnsubscribeLink(link string) bool {
 	if link == "" {
 		return false
 	}
-	
+
 	// Must be HTTPS for security
 	if !strings.HasPrefix(link, "https://") {
 		return false
 	}
-	
+
 	// Common unsubscribe patterns
 	unsubscribePatterns := []string{
 		"unsubscribe",
@@ -150,14 +150,14 @@ func (w *WebAutomationService) isValidUnsubscribeLink(link string) bool {
 		"email-preferences",
 		"subscription",
 	}
-	
+
 	linkLower := strings.ToLower(link)
 	for _, pattern := range unsubscribePatterns {
 		if strings.Contains(linkLower, pattern) {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
@@ -260,7 +260,7 @@ func (w *WebAutomationService) processUnsubscribeLink(ctx context.Context, link 
 
 	// Verify success if possible
 	successVerified := w.verifyUnsubscribeSuccess(page)
-	
+
 	if successVerified {
 		return &repositories.UnsubscribeResult{
 			Success: true,
@@ -285,9 +285,9 @@ func (w *WebAutomationService) executeAction(page playwright.Page, action reposi
 				elements, _ := page.QuerySelectorAll("button, input[type='button'], input[type='submit'], a")
 				for _, el := range elements {
 					text, _ := el.TextContent()
-					if strings.Contains(strings.ToLower(text), "unsubscribe") || 
-					   strings.Contains(strings.ToLower(text), "remove") ||
-					   strings.Contains(strings.ToLower(text), "opt") {
+					if strings.Contains(strings.ToLower(text), "unsubscribe") ||
+						strings.Contains(strings.ToLower(text), "remove") ||
+						strings.Contains(strings.ToLower(text), "opt") {
 						return el.Click()
 					}
 				}
@@ -377,7 +377,7 @@ func ExtractUnsubscribeLink(headers, body string) *string {
 			return &link
 		}
 	}
-	
+
 	// Look for unsubscribe links in email body
 	unsubscribeRegexes := []*regexp.Regexp{
 		regexp.MustCompile(`href=["']([^"']*unsubscribe[^"']*)["']`),
@@ -386,7 +386,7 @@ func ExtractUnsubscribeLink(headers, body string) *string {
 		regexp.MustCompile(`href=["']([^"']*email-preferences[^"']*)["']`),
 		regexp.MustCompile(`href=["']([^"']*subscription[^"']*)["']`),
 	}
-	
+
 	for _, regex := range unsubscribeRegexes {
 		if matches := regex.FindStringSubmatch(body); len(matches) > 1 {
 			link := strings.TrimSpace(matches[1])
@@ -401,6 +401,6 @@ func ExtractUnsubscribeLink(headers, body string) *string {
 			}
 		}
 	}
-	
+
 	return nil
 }

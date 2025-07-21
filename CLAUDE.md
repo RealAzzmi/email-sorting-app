@@ -33,7 +33,7 @@ npm run lint
 # Start development server
 go run cmd/server/main.go
 
-# Or use the convenience script
+# Or use the convenience script (loads .env automatically)
 ./start.sh
 
 # Build the application
@@ -41,6 +41,9 @@ go build -o email-sorting-app cmd/server/main.go
 
 # Initialize database (requires PostgreSQL running)
 psql -d email_sorting_app -f internal/adapters/database/migrations/schema.sql
+
+# Format Go code
+go fmt ./...
 
 # Set up environment (copy .env.example to .env and configure)
 cp .env.example .env
@@ -61,8 +64,9 @@ cp .env.example .env
 - **Web Framework**: Gin
 - **Database Driver**: pgx v5 for PostgreSQL
 - **ORM/Database Interaction**: Raw SQL with pgx
-- **AI Integration**: Google Gemini API for email categorization
+- **AI Integration**: Google Gemini API for email categorization and summaries
 - **OAuth**: Google OAuth2 for Gmail authentication
+- **Web Automation**: Playwright for unsubscribe functionality
 
 ### Configuration
 - TypeScript path alias: `@/*` points to `./src/*`

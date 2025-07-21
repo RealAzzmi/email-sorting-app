@@ -9,12 +9,12 @@ import (
 )
 
 type Config struct {
-	DatabaseURL      string
-	GoogleClientID   string
-	GoogleSecret     string
-	RedirectURL      string
-	Port             string
-	GeminiAPIKey     string
+	DatabaseURL    string
+	GoogleClientID string
+	GoogleSecret   string
+	RedirectURL    string
+	Port           string
+	GeminiAPIKey   string
 }
 
 func Load() (*Config, error) {

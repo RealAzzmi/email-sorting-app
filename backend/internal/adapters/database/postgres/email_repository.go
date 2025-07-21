@@ -45,14 +45,14 @@ func (r *EmailRepository) GetByAccountID(ctx context.Context, accountID int64) (
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan email: %w", err)
 		}
-		
+
 		// Load categories for this email
 		categoryIDs, err := r.GetEmailCategories(ctx, email.ID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get email categories: %w", err)
 		}
 		email.CategoryIDs = categoryIDs
-		
+
 		emails = append(emails, email)
 	}
 
@@ -244,7 +244,7 @@ func (r *EmailRepository) GetByAccountIDPaginated(ctx context.Context, accountID
 
 	// Calculate offset
 	offset := (params.Page - 1) * params.PageSize
-	
+
 	// Get paginated emails
 	rows, err := r.db.Query(ctx, `
 		SELECT id, account_id, gmail_message_id, sender, subject, body, 
@@ -271,14 +271,14 @@ func (r *EmailRepository) GetByAccountIDPaginated(ctx context.Context, accountID
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan email: %w", err)
 		}
-		
+
 		// Load categories for this email
 		categoryIDs, err := r.GetEmailCategories(ctx, email.ID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get email categories: %w", err)
 		}
 		email.CategoryIDs = categoryIDs
-		
+
 		emails = append(emails, email)
 	}
 
@@ -365,7 +365,7 @@ func (r *EmailRepository) GetByCategoryIDPaginated(ctx context.Context, accountI
 
 	// Calculate offset
 	offset := (params.Page - 1) * params.PageSize
-	
+
 	// Get paginated emails
 	rows, err := r.db.Query(ctx, `
 		SELECT e.id, e.account_id, e.gmail_message_id, e.sender, e.subject, e.body, 
@@ -393,14 +393,14 @@ func (r *EmailRepository) GetByCategoryIDPaginated(ctx context.Context, accountI
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan email: %w", err)
 		}
-		
+
 		// Load categories for this email
 		categoryIDs, err := r.GetEmailCategories(ctx, email.ID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get email categories: %w", err)
 		}
 		email.CategoryIDs = categoryIDs
-		
+
 		emails = append(emails, email)
 	}
 

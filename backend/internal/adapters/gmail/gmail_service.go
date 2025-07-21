@@ -208,7 +208,7 @@ func (s *GmailService) ListHistory(ctx context.Context, token *oauth2.Token, sta
 		for _, msg := range history.MessagesAdded {
 			if !messageIds[msg.Message.Id] {
 				messageIds[msg.Message.Id] = true
-				
+
 				// Fetch the full message
 				fullMsg, err := srv.Users.Messages.Get("me", msg.Message.Id).Do()
 				if err != nil {
@@ -235,7 +235,7 @@ func (s *GmailService) ListHistory(ctx context.Context, token *oauth2.Token, sta
 		for _, labelChange := range history.LabelsAdded {
 			if !messageIds[labelChange.Message.Id] {
 				messageIds[labelChange.Message.Id] = true
-				
+
 				// Fetch the full message with updated labels
 				fullMsg, err := srv.Users.Messages.Get("me", labelChange.Message.Id).Do()
 				if err != nil {
@@ -261,7 +261,7 @@ func (s *GmailService) ListHistory(ctx context.Context, token *oauth2.Token, sta
 		for _, labelChange := range history.LabelsRemoved {
 			if !messageIds[labelChange.Message.Id] {
 				messageIds[labelChange.Message.Id] = true
-				
+
 				// Fetch the full message with updated labels
 				fullMsg, err := srv.Users.Messages.Get("me", labelChange.Message.Id).Do()
 				if err != nil {
@@ -345,27 +345,20 @@ func (s *GmailService) extractHeaders(headers []*gmail.MessagePartHeader) map[st
 }
 
 func (s *GmailService) extractUnsubscribeLink(headers []*gmail.MessagePartHeader, body string) *string {
-	fmt.Printf("📧 extractUnsubscribeLink called\n")
-	
 	// Convert headers to string format for AI
 	headerStr := ""
 	for _, header := range headers {
 		headerStr += fmt.Sprintf("%s: %s\n", header.Name, header.Value)
 	}
-	
+
 	// Try AI extraction first
 	if s.aiService != nil {
-		fmt.Printf("🤖 AI service found, calling extraction...\n")
 		link, err := s.aiService.ExtractUnsubscribeLink(context.Background(), headerStr, body)
-		fmt.Printf("🤖 AI result: link='%s', err=%v\n", link, err)
 		if err == nil && link != "" {
-			fmt.Printf("🤖 AI found valid link: %s\n", link)
 			return &link
 		}
-	} else {
-		fmt.Printf("❌ AI service is nil - skipping AI extraction\n")
 	}
-	
+
 	// Fallback to regex-based extraction
 	// First check List-Unsubscribe header
 	listUnsubscribe := s.getHeaderValue(headers, "List-Unsubscribe")
@@ -388,8 +381,7 @@ func (s *GmailService) extractUnsubscribeLink(headers []*gmail.MessagePartHeader
 			}
 		}
 	}
-	
-	fmt.Printf("📧 No unsubscribe link found (AI failed, regex failed)\n")
+
 	return nil
 }
 
@@ -408,14 +400,15 @@ func (s *GmailService) extractBody(part *gmail.MessagePart) string {
 		if subPart.Body != nil && subPart.Body.Data != "" {
 			data, err := base64.URLEncoding.DecodeString(subPart.Body.Data)
 			if err == nil {
-				if subPart.MimeType == "text/html" {
+				switch subPart.MimeType {
+				case "text/html":
 					htmlContent = string(data)
-				} else if subPart.MimeType == "text/plain" {
+				case "text/plain":
 					plainContent = string(data)
 				}
 			}
 		}
-		
+
 		// Recursively check nested parts
 		if len(subPart.Parts) > 0 {
 			nestedBody := s.extractBody(subPart)
@@ -502,7 +495,7 @@ func (s *GmailService) CreateLabel(ctx context.Context, token *oauth2.Token, lab
 
 	// Create the new label
 	newLabel := &gmail.Label{
-		Name:                labelName,
+		Name:                  labelName,
 		MessageListVisibility: "show",
 		LabelListVisibility:   "labelShow",
 	}

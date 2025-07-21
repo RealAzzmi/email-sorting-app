@@ -48,7 +48,7 @@ func (r *AccountRepository) GetByID(ctx context.Context, id int64) (*entities.Ac
 		SELECT id, email, name, access_token, refresh_token, token_expiry, last_sync_history_id, created_at, updated_at 
 		FROM accounts WHERE id = $1
 	`, id).Scan(
-		&account.ID, &account.Email, &account.Name, &account.AccessToken, 
+		&account.ID, &account.Email, &account.Name, &account.AccessToken,
 		&account.RefreshToken, &account.TokenExpiry, &account.LastSyncHistoryID, &account.CreatedAt, &account.UpdatedAt,
 	)
 	if err != nil {
@@ -67,7 +67,7 @@ func (r *AccountRepository) GetByEmail(ctx context.Context, email string) (*enti
 		SELECT id, email, name, access_token, refresh_token, token_expiry, last_sync_history_id, created_at, updated_at 
 		FROM accounts WHERE email = $1
 	`, email).Scan(
-		&account.ID, &account.Email, &account.Name, &account.AccessToken, 
+		&account.ID, &account.Email, &account.Name, &account.AccessToken,
 		&account.RefreshToken, &account.TokenExpiry, &account.LastSyncHistoryID, &account.CreatedAt, &account.UpdatedAt,
 	)
 	if err != nil {
